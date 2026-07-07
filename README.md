@@ -1,8 +1,9 @@
-# Agentic Defense Matrix (ADM)
+
+#  Agentic Defense Matrix (ADM)
 
 > **The Unified Blue/Green Team Architecture for Agentic AI Systems**
 
-ADM is a纵深 defense system designed for Agentic AI with autonomous planning and tool-calling capabilities. It goes beyond basic prompt filtering by leveraging OS-level telemetry, dynamic permission control, and stateful SIEM to fundamentally limit the blast radius of AI agents.
+一個針對具備自主規劃與工具調用（Tool-calling）能力的 Agentic AI 所設計的縱深防禦系統。本專案屏棄傳統僅依賴「提示詞過濾」的無效防護，透過作業系統底層遙測（Telemetry）、動態權限管控與狀態感知 SIEM，徹底限制 AI 代理的爆炸半徑。
 
 ---
 
