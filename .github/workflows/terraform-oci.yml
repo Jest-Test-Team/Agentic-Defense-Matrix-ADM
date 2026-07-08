@@ -201,6 +201,7 @@ jobs:
             echo "- Plan previews what Terraform would create/change."
             echo "- Actual deployment only happens for manual runs with action=apply and auto_approve=true."
             echo "- To avoid OCI vcn-count failures, provide existing_subnet_id or set repo variable ADM_EXISTING_SUBNET_ID."
+            echo "- The plan log's network_diagnostics output shows vcn-count quota usage and all VCNs/subnets in the compartment."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Save Terraform state cache

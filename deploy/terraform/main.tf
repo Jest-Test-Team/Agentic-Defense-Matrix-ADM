@@ -90,6 +90,13 @@ resource "oci_core_vcn" "adm_vcn" {
   compartment_id = var.tenancy_ocid
   cidr_block     = "10.0.0.0/16"
   display_name   = "adm-vcn"
+
+  lifecycle {
+    precondition {
+      condition     = try(tonumber(data.oci_limits_resource_availability.vcn_count.available) > 0, true)
+      error_message = "The tenancy vcn-count quota is exhausted, so creating adm-vcn would fail. See the network_diagnostics output for what is using the quota, then reuse an existing subnet via existing_subnet_id (repo variable ADM_EXISTING_SUBNET_ID), delete an unused VCN, or request a limit increase."
+    }
+  }
 }
 
 resource "oci_core_internet_gateway" "adm_igw" {
