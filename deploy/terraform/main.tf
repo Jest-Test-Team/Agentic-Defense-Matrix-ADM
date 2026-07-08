@@ -142,8 +142,8 @@ resource "oci_core_instance" "adm_instance" {
 resource "oci_core_volume" "adm_volume" {
   compartment_id      = var.tenancy_ocid
   availability_domain = data.oci_identity_availability_domains.ads.availability_domains[0].name
-  display_name        = "adm-data"
-  size_in_gbs         = var.volume_size_gbs
+  display_name         = "adm-data"
+  size_in_gbs          = var.volume_size_gbs
   volume_backup_policy = "disabled"
 }
 
