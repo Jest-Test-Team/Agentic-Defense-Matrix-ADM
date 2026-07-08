@@ -72,4 +72,6 @@ OCI.LOCAL.ENV
 OCI-CREDENTIALS/
 scripts/SET-UP-GHA-SECRECTS.SH
 *.0
+deploy
 deploy/terraform/.terraform.lock.hcl
+deploy/terraform/
