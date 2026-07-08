@@ -144,7 +144,6 @@ resource "oci_core_volume" "adm_volume" {
   availability_domain  = data.oci_identity_availability_domains.ads.availability_domains[0].name
   display_name         = "adm-data"
   size_in_gbs          = var.volume_size_gbs
-  volume_backup_policy = "disabled"
 }
 
 resource "oci_core_volume_attachment" "adm_volume_attachment" {
