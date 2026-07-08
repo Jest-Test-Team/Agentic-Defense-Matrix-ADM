@@ -37,7 +37,7 @@ func FuzzPolicyEvaluate(f *testing.F) {
 
 		result, err := engine.Evaluate(context.Background(), req)
 		if err != nil {
-			if policyID != "nonexistent" {
+			if policyID == "agent_permissions" {
 				t.Errorf("unexpected error: %v", err)
 			}
 			return

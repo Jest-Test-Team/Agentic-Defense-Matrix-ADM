@@ -88,10 +88,10 @@ impl EgressBlocker {
 
     fn matches_rule(&self, rule: &FilterRule, remote_addr: &str, remote_port: u16) -> bool {
         // Simple matching - in production would use CIDR matching
-        if rule.remote_addr == remote_addr || rule.remote_addr == "0.0.0.0/0" {
-            if rule.remote_port == 0 || rule.remote_port == remote_port {
-                return true;
-            }
+        if (rule.remote_addr == remote_addr || rule.remote_addr == "0.0.0.0/0")
+            && (rule.remote_port == 0 || rule.remote_port == remote_port)
+        {
+            return true;
         }
         false
     }
