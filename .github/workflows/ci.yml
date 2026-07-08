@@ -103,6 +103,7 @@ jobs:
           go build -ldflags="-w -s" -o bin/adm-siem-${{ matrix.goos }}-${{ matrix.arch }} ./cmd/siem_engine
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: adm-${{ matrix.goos }}-${{ matrix.arch }}
           path: bin/
@@ -131,6 +132,7 @@ jobs:
         working-directory: daemon_watchdog
       - name: Upload artifact
         uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: adm-watchdog-${{ matrix.target }}
           path: daemon_watchdog/target/${{ matrix.target }}/release/adm-watchdog*
