@@ -288,6 +288,7 @@ Optional repository settings:
 | Setting | Type | Default |
 |---------|------|---------|
 | `OCI_REGION` | Secret | `us-ashburn-1` |
+| `ADM_EXISTING_SUBNET_ID` | Variable | Empty; set to reuse an existing OCI subnet instead of creating a VCN |
 | `ADM_OCPUS` | Variable | `4` |
 | `ADM_MEMORY_IN_GBS` | Variable | `24` |
 | `ADM_VOLUME_SIZE_GBS` | Variable | `100` |

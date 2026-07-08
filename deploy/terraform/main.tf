@@ -32,33 +32,46 @@ data "oci_core_images" "ol8_image" {
   shape                    = "VM.Standard.A1.Flex"
 }
 
+locals {
+  create_network = var.existing_subnet_id == ""
+  subnet_id      = local.create_network ? oci_core_subnet.adm_subnet[0].id : var.existing_subnet_id
+}
+
 resource "oci_core_vcn" "adm_vcn" {
+  count = local.create_network ? 1 : 0
+
   compartment_id = var.tenancy_ocid
   cidr_block     = "10.0.0.0/16"
   display_name   = "adm-vcn"
 }
 
 resource "oci_core_internet_gateway" "adm_igw" {
+  count = local.create_network ? 1 : 0
+
   compartment_id = var.tenancy_ocid
-  vcn_id         = oci_core_vcn.adm_vcn.id
+  vcn_id         = oci_core_vcn.adm_vcn[0].id
   display_name   = "adm-igw"
   enabled        = true
 }
 
 resource "oci_core_route_table" "adm_rt" {
+  count = local.create_network ? 1 : 0
+
   compartment_id = var.tenancy_ocid
-  vcn_id         = oci_core_vcn.adm_vcn.id
+  vcn_id         = oci_core_vcn.adm_vcn[0].id
   display_name   = "adm-rt"
 
   route_rules {
     destination       = "0.0.0.0/0"
-    network_entity_id = oci_core_internet_gateway.adm_igw.id
+    network_entity_id = oci_core_internet_gateway.adm_igw[0].id
   }
 }
 
 resource "oci_core_security_list" "adm_sl" {
+  count = local.create_network ? 1 : 0
+
   compartment_id = var.tenancy_ocid
-  vcn_id         = oci_core_vcn.adm_vcn.id
+  vcn_id         = oci_core_vcn.adm_vcn[0].id
   display_name   = "adm-sl"
 
   ingress_security_rules {
@@ -95,12 +108,14 @@ resource "oci_core_security_list" "adm_sl" {
 }
 
 resource "oci_core_subnet" "adm_subnet" {
+  count = local.create_network ? 1 : 0
+
   compartment_id    = var.tenancy_ocid
-  vcn_id            = oci_core_vcn.adm_vcn.id
+  vcn_id            = oci_core_vcn.adm_vcn[0].id
   cidr_block        = "10.0.0.0/24"
   display_name      = "adm-subnet"
-  route_table_id    = oci_core_route_table.adm_rt.id
-  security_list_ids = [oci_core_security_list.adm_sl.id]
+  route_table_id    = oci_core_route_table.adm_rt[0].id
+  security_list_ids = [oci_core_security_list.adm_sl[0].id]
   dns_label         = "adm"
 }
 
@@ -116,7 +131,7 @@ resource "oci_core_instance" "adm_instance" {
   }
 
   create_vnic_details {
-    subnet_id        = oci_core_subnet.adm_subnet.id
+    subnet_id        = local.subnet_id
     display_name     = "adm-vnic"
     assign_public_ip = true
   }

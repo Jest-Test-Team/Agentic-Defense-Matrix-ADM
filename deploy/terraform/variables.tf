@@ -28,6 +28,12 @@ variable "region" {
   default     = "us-ashburn-1"
 }
 
+variable "existing_subnet_id" {
+  description = "Existing OCI subnet OCID to deploy into. Leave empty to create ADM networking."
+  type        = string
+  default     = ""
+}
+
 variable "ocpus" {
   description = "Number of OCPUs (max 4 for Always Free)"
   type        = number
