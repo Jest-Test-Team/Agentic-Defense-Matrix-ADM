@@ -108,9 +108,10 @@ data "oci_core_subnets" "by_vcn" {
 # Storage diagnostics: the Always Free block storage allowance is shared by
 # boot volumes, block volumes, and their backups across all compartments.
 data "oci_limits_resource_availability" "block_storage_gb" {
-  compartment_id = var.tenancy_ocid
-  service_name   = "block-storage"
-  limit_name     = "total-storage-gb"
+  compartment_id      = var.tenancy_ocid
+  service_name        = "block-storage"
+  limit_name          = "total-storage-gb"
+  availability_domain = data.oci_identity_availability_domains.ads.availability_domains[0].name
 }
 
 data "oci_core_boot_volumes" "by_compartment" {
