@@ -11,6 +11,34 @@ output "compute_diagnostics" {
   }
 }
 
+output "storage_diagnostics" {
+  description = "Block storage quota usage and all boot/block volumes per compartment"
+  value = {
+    storage_gb_used      = data.oci_limits_resource_availability.block_storage_gb.used
+    storage_gb_available = data.oci_limits_resource_availability.block_storage_gb.available
+    boot_volumes = flatten([
+      for key, d in data.oci_core_boot_volumes.by_compartment : [
+        for v in d.boot_volumes : {
+          name        = v.display_name
+          state       = v.state
+          size_gbs    = v.size_in_gbs
+          compartment = local.compartments[key].name
+        }
+      ]
+    ])
+    block_volumes = flatten([
+      for key, d in data.oci_core_volumes.by_compartment : [
+        for v in d.volumes : {
+          name        = v.display_name
+          state       = v.state
+          size_gbs    = v.size_in_gbs
+          compartment = local.compartments[key].name
+        }
+      ]
+    ])
+  }
+}
+
 output "network_diagnostics" {
   description = "vcn-count quota usage and VCNs/subnets across all compartments"
   value = {

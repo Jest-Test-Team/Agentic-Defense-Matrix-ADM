@@ -105,6 +105,27 @@ data "oci_core_subnets" "by_vcn" {
   vcn_id         = each.key
 }
 
+# Storage diagnostics: the Always Free block storage allowance is shared by
+# boot volumes, block volumes, and their backups across all compartments.
+data "oci_limits_resource_availability" "block_storage_gb" {
+  compartment_id = var.tenancy_ocid
+  service_name   = "block-storage"
+  limit_name     = "total-storage-gb"
+}
+
+data "oci_core_boot_volumes" "by_compartment" {
+  for_each = local.compartments
+
+  availability_domain = data.oci_identity_availability_domains.ads.availability_domains[0].name
+  compartment_id      = each.value.id
+}
+
+data "oci_core_volumes" "by_compartment" {
+  for_each = local.compartments
+
+  compartment_id = each.value.id
+}
+
 # Diagnostics surfaced as plan outputs: actual vcn-count quota usage and every
 # VCN/subnet in the tenancy, so a LimitExceeded failure can be traced to what
 # is consuming the quota without console access.
