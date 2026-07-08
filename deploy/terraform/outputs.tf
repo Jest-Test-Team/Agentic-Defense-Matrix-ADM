@@ -1,5 +1,16 @@
 # Shown under "Changes to Outputs" during plan. OCIDs are truncated because CI
 # logs are public; match the suffix against the OCI console to get the full OCID.
+output "compute_diagnostics" {
+  description = "A1 quota availability and the shape actually selected"
+  value = {
+    a1_cores_available  = local.a1_cores_available
+    a1_memory_available = local.a1_memory_available
+    selected_shape      = local.instance_shape
+    selected_ocpus      = local.use_a1 ? local.instance_ocpus : 1
+    selected_memory_gbs = local.use_a1 ? local.instance_memory : 1
+  }
+}
+
 output "network_diagnostics" {
   description = "vcn-count quota usage and VCNs/subnets across all compartments"
   value = {

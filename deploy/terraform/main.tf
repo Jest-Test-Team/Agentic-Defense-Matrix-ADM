@@ -25,11 +25,37 @@ data "oci_identity_availability_domains" "ads" {
   compartment_id = var.tenancy_ocid
 }
 
+# The Always Free A1 allowance varies by tenancy and can be zero. Size the
+# instance to what the compute limits actually allow, falling back to the
+# free x86 micro shape when no A1 capacity is granted at all.
+data "oci_limits_resource_availability" "a1_cores" {
+  compartment_id = var.tenancy_ocid
+  service_name   = "compute"
+  limit_name     = "standard-a1-core-regional-count"
+}
+
+data "oci_limits_resource_availability" "a1_memory" {
+  compartment_id = var.tenancy_ocid
+  service_name   = "compute"
+  limit_name     = "standard-a1-memory-regional-count"
+}
+
+locals {
+  a1_cores_available  = try(tonumber(data.oci_limits_resource_availability.a1_cores.available), 0)
+  a1_memory_available = try(tonumber(data.oci_limits_resource_availability.a1_memory.available), 0)
+
+  instance_ocpus  = min(var.ocpus, local.a1_cores_available, local.a1_memory_available)
+  instance_memory = min(var.memory_in_gbs, local.a1_memory_available)
+  use_a1          = local.instance_ocpus >= 1
+
+  instance_shape = local.use_a1 ? "VM.Standard.A1.Flex" : "VM.Standard.E2.1.Micro"
+}
+
 data "oci_core_images" "ol8_image" {
   compartment_id           = var.tenancy_ocid
   operating_system         = "Oracle Linux"
   operating_system_version = "8"
-  shape                    = "VM.Standard.A1.Flex"
+  shape                    = local.instance_shape
 }
 
 # The vcn-count limit is tenancy-wide but VCN listings are per-compartment, so
@@ -267,11 +293,16 @@ resource "oci_core_instance" "adm_instance" {
   availability_domain = data.oci_identity_availability_domains.ads.availability_domains[0].name
   compartment_id      = var.tenancy_ocid
   display_name        = "adm-instance"
-  shape               = "VM.Standard.A1.Flex"
+  shape               = local.instance_shape
 
-  shape_config {
-    ocpus         = var.ocpus
-    memory_in_gbs = var.memory_in_gbs
+  # Fixed shapes like E2.1.Micro reject shape_config; only Flex shapes take one.
+  dynamic "shape_config" {
+    for_each = local.use_a1 ? [1] : []
+
+    content {
+      ocpus         = local.instance_ocpus
+      memory_in_gbs = local.instance_memory
+    }
   }
 
   create_vnic_details {
