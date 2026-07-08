@@ -134,15 +134,15 @@ jobs:
           fi
 
           if [ -z "$TF_VAR_existing_subnet_id" ] && [ "${{ inputs.allow_create_network }}" != "true" ]; then
-            echo "::error::Apply would create a new OCI VCN/subnet, but existing_subnet_id is empty and allow_create_network=false."
-            echo "::error::Your last apply failed with OCI vcn-count. Re-run with existing_subnet_id set to an existing subnet OCID, or explicitly set allow_create_network=true if your OCI VCN quota allows a new VCN."
+            echo "::error::Apply may create a new OCI VCN/subnet, but existing_subnet_id is empty and allow_create_network=false."
+            echo "::error::Re-run with existing_subnet_id set to an existing subnet OCID, or set allow_create_network=true. Terraform reuses an existing adm-vcn/adm-subnet if one is found, and only creates a new VCN otherwise."
             exit 1
           fi
 
           if [ -n "$TF_VAR_existing_subnet_id" ]; then
             echo "Applying into existing subnet: ${TF_VAR_existing_subnet_id:0:24}..."
           else
-            echo "::warning::Applying with allow_create_network=true. Terraform may create a new OCI VCN/subnet and can fail if the tenancy VCN quota is exhausted."
+            echo "::warning::Applying with allow_create_network=true. Terraform reuses an existing adm-vcn/adm-subnet if found; otherwise it creates a new VCN, which fails if the tenancy vcn-count quota is exhausted."
           fi
 
       - name: Write OCI API private key
@@ -156,6 +156,13 @@ jobs:
 
       - name: Terraform init
         run: terraform init
+
+      - name: Skip network discovery when state manages the VCN
+        run: |
+          if terraform state list 2>/dev/null | grep -Fq 'oci_core_vcn.adm_vcn'; then
+            echo "TF_VAR_reuse_discovered_network=false" >> "$GITHUB_ENV"
+            echo "State already manages adm-vcn; disabling auto-discovery so Terraform keeps managing it."
+          fi
 
       - name: Terraform plan
         if: github.event_name == 'push' || inputs.action == 'plan' || inputs.action == 'apply'

@@ -15,6 +15,13 @@ ocpus         = 4
 memory_in_gbs = 24
 volume_size_gbs = 100
 
+# Networking
+# Set to deploy into an existing subnet instead of creating adm-vcn/adm-subnet.
+# existing_subnet_id = "ocid1.subnet.oc1..aaaaaaaa..."
+# When existing_subnet_id is empty, an adm-vcn/adm-subnet already present in the
+# tenancy is reused automatically. Set to false only if this state manages the network.
+# reuse_discovered_network = true
+
 # SSH Public Key (generate with: ssh-keygen -t ed25519 -f ~/.ssh/adm_key)
 ssh_public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA... adm@local"
 

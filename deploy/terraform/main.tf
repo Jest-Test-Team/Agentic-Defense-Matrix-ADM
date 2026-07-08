@@ -32,9 +32,36 @@ data "oci_core_images" "ol8_image" {
   shape                    = "VM.Standard.A1.Flex"
 }
 
+# State is cached between CI runs and can be lost; a lost state would leave an
+# orphaned adm-vcn that still counts against the tenancy vcn-count limit. Look
+# for an existing adm-vcn/adm-subnet and reuse it instead of creating another.
+data "oci_core_vcns" "existing_adm" {
+  count = var.existing_subnet_id == "" && var.reuse_discovered_network ? 1 : 0
+
+  compartment_id = var.tenancy_ocid
+  display_name   = "adm-vcn"
+  state          = "AVAILABLE"
+}
+
+data "oci_core_subnets" "existing_adm" {
+  count = local.discovered_vcn_id != null ? 1 : 0
+
+  compartment_id = var.tenancy_ocid
+  vcn_id         = local.discovered_vcn_id
+  display_name   = "adm-subnet"
+  state          = "AVAILABLE"
+}
+
 locals {
-  create_network = var.existing_subnet_id == ""
-  subnet_id      = local.create_network ? oci_core_subnet.adm_subnet[0].id : var.existing_subnet_id
+  discovered_vcn_id    = try(data.oci_core_vcns.existing_adm[0].virtual_networks[0].id, null)
+  discovered_subnet_id = try(data.oci_core_subnets.existing_adm[0].subnets[0].id, null)
+
+  create_network = var.existing_subnet_id == "" && local.discovered_subnet_id == null
+  subnet_id = (
+    var.existing_subnet_id != "" ? var.existing_subnet_id :
+    local.discovered_subnet_id != null ? local.discovered_subnet_id :
+    oci_core_subnet.adm_subnet[0].id
+  )
 }
 
 resource "oci_core_vcn" "adm_vcn" {

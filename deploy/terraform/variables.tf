@@ -34,6 +34,12 @@ variable "existing_subnet_id" {
   default     = ""
 }
 
+variable "reuse_discovered_network" {
+  description = "When existing_subnet_id is empty, reuse an adm-vcn/adm-subnet already present in the tenancy instead of creating a new VCN. Must be disabled when this state already manages the network, or Terraform would plan to destroy it."
+  type        = bool
+  default     = true
+}
+
 variable "ocpus" {
   description = "Number of OCPUs (max 4 for Always Free)"
   type        = number
