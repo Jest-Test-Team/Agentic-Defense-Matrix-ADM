@@ -32,49 +32,72 @@ data "oci_core_images" "ol8_image" {
   shape                    = "VM.Standard.A1.Flex"
 }
 
-# State is cached between CI runs and can be lost; a lost state would leave an
-# orphaned adm-vcn that still counts against the tenancy vcn-count limit. Look
-# for an existing adm-vcn/adm-subnet and reuse it instead of creating another.
-data "oci_core_vcns" "existing_adm" {
-  count = var.existing_subnet_id == "" && var.reuse_discovered_network ? 1 : 0
-
-  compartment_id = var.tenancy_ocid
-  display_name   = "adm-vcn"
-  state          = "AVAILABLE"
+# The vcn-count limit is tenancy-wide but VCN listings are per-compartment, so
+# search every accessible compartment for an existing adm-vcn/adm-subnet to
+# reuse (state is cached between CI runs and can be lost, orphaning the VCN).
+data "oci_identity_compartments" "all" {
+  compartment_id            = var.tenancy_ocid
+  compartment_id_in_subtree = true
+  access_level              = "ACCESSIBLE"
+  state                     = "ACTIVE"
 }
 
-data "oci_core_subnets" "existing_adm" {
-  count = local.discovered_vcn_id != null ? 1 : 0
+locals {
+  # Keyed by OCID suffix so full compartment OCIDs stay out of public CI logs.
+  compartments = merge(
+    { (substr(nonsensitive(var.tenancy_ocid), -12, 12)) = { id = nonsensitive(var.tenancy_ocid), name = "(root)" } },
+    { for c in data.oci_identity_compartments.all.compartments : substr(c.id, -12, 12) => { id = c.id, name = c.name } }
+  )
+}
 
-  compartment_id = var.tenancy_ocid
-  vcn_id         = local.discovered_vcn_id
-  display_name   = "adm-subnet"
-  state          = "AVAILABLE"
+data "oci_core_vcns" "by_compartment" {
+  for_each = local.compartments
+
+  compartment_id = each.value.id
+}
+
+locals {
+  all_vcns = flatten([
+    for key, d in data.oci_core_vcns.by_compartment : [
+      for v in d.virtual_networks : {
+        id          = v.id
+        compartment = local.compartments[key].name
+        comp_id     = local.compartments[key].id
+        name        = v.display_name
+        state       = v.state
+        cidr_blocks = v.cidr_blocks
+      }
+    ]
+  ])
+  vcns_by_id = { for v in local.all_vcns : v.id => v }
+}
+
+data "oci_core_subnets" "by_vcn" {
+  for_each = local.vcns_by_id
+
+  compartment_id = each.value.comp_id
+  vcn_id         = each.key
 }
 
 # Diagnostics surfaced as plan outputs: actual vcn-count quota usage and every
-# VCN/subnet in the compartment, so a LimitExceeded failure can be traced to
-# what is consuming the quota without console access.
+# VCN/subnet in the tenancy, so a LimitExceeded failure can be traced to what
+# is consuming the quota without console access.
 data "oci_limits_resource_availability" "vcn_count" {
   compartment_id = var.tenancy_ocid
   service_name   = "vcn"
   limit_name     = "vcn-count"
 }
 
-data "oci_core_vcns" "diagnostics" {
-  compartment_id = var.tenancy_ocid
-}
-
-data "oci_core_subnets" "diagnostics" {
-  for_each = { for v in data.oci_core_vcns.diagnostics.virtual_networks : v.id => v }
-
-  compartment_id = var.tenancy_ocid
-  vcn_id         = each.key
-}
-
 locals {
-  discovered_vcn_id    = try(data.oci_core_vcns.existing_adm[0].virtual_networks[0].id, null)
-  discovered_subnet_id = try(data.oci_core_subnets.existing_adm[0].subnets[0].id, null)
+  discovered_vcn_id = (
+    var.existing_subnet_id == "" && var.reuse_discovered_network ?
+    try([for v in local.all_vcns : v.id if v.name == "adm-vcn" && v.state == "AVAILABLE"][0], null) :
+    null
+  )
+  discovered_subnet_id = local.discovered_vcn_id == null ? null : try(
+    [for s in data.oci_core_subnets.by_vcn[local.discovered_vcn_id].subnets : s.id if s.display_name == "adm-subnet"][0],
+    null
+  )
 
   create_network = var.existing_subnet_id == "" && local.discovered_subnet_id == null
   subnet_id = (
