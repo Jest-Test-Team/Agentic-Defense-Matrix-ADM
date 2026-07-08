@@ -46,7 +46,7 @@ locals {
 
   instance_ocpus  = min(var.ocpus, local.a1_cores_available, local.a1_memory_available)
   instance_memory = min(var.memory_in_gbs, local.a1_memory_available)
-  use_a1          = local.instance_ocpus >= 1
+  use_a1          = var.force_shape != "micro" && local.instance_ocpus >= 1
 
   instance_shape = local.use_a1 ? "VM.Standard.A1.Flex" : "VM.Standard.E2.1.Micro"
 }

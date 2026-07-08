@@ -40,6 +40,17 @@ variable "reuse_discovered_network" {
   default     = true
 }
 
+variable "force_shape" {
+  description = "Set to \"micro\" to force VM.Standard.E2.1.Micro instead of A1.Flex, e.g. when the region is out of A1 host capacity. Empty picks automatically."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = contains(["", "micro"], var.force_shape)
+    error_message = "force_shape must be \"\" or \"micro\"."
+  }
+}
+
 variable "ocpus" {
   description = "Number of OCPUs (max 4 for Always Free)"
   type        = number
