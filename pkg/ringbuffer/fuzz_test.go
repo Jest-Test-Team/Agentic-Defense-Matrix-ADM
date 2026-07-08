@@ -26,21 +26,21 @@ func FuzzRingBufferPush(f *testing.F) {
 		}
 
 		// Push should not panic
-		rb.Push(value)
+		rb.Push(&Event{Payload: []byte(value)})
 
 		// Verify data
 		if rb.Len() != 1 {
 			t.Errorf("expected length 1, got %d", rb.Len())
 		}
 
-		if rb.Cap() != capacity {
+		if rb.Cap() != int64(capacity) {
 			t.Errorf("expected capacity %d, got %d", capacity, rb.Cap())
 		}
 
 		// Pop should return the value
 		item := rb.Pop()
-		if item != value {
-			t.Errorf("expected %q, got %q", value, item)
+		if item == nil || string(item.Payload) != value {
+			t.Errorf("expected %q, got %v", value, item)
 		}
 	})
 }
@@ -61,19 +61,19 @@ func FuzzRingBufferOverwrite(f *testing.F) {
 
 		rb := NewRingBuffer(capacity)
 		for i := 0; i < count; i++ {
-			rb.Push(value)
+			rb.Push(&Event{Payload: []byte(value)})
 		}
 
 		// Length should never exceed capacity
-		if rb.Len() > capacity {
+		if rb.Len() > int64(capacity) {
 			t.Errorf("length %d exceeds capacity %d", rb.Len(), capacity)
 		}
 
 		// Pop all items
 		for rb.Len() > 0 {
 			item := rb.Pop()
-			if item != value {
-				t.Errorf("expected %q, got %q", value, item)
+			if item == nil || string(item.Payload) != value {
+				t.Errorf("expected %q, got %v", value, item)
 			}
 		}
 
@@ -97,12 +97,13 @@ func FuzzRingBufferDrain(f *testing.F) {
 
 		rb := NewRingBuffer(capacity)
 		for i := 0; i < count; i++ {
-			rb.Push("item")
+			rb.Push(&Event{Payload: []byte("item")})
 		}
 
-		drained := rb.Drain()
-		if len(drained) != rb.Len() {
-			t.Errorf("drain length mismatch: %d vs %d", len(drained), rb.Len())
+		before := rb.Len()
+		drained := rb.Drain(count)
+		if int64(len(drained)) != before {
+			t.Errorf("drain length mismatch: %d vs %d", len(drained), before)
 		}
 
 		if rb.Len() != 0 {
@@ -125,11 +126,11 @@ func FuzzRingBufferPeek(f *testing.F) {
 		}
 
 		rb := NewRingBuffer(capacity)
-		rb.Push(value)
+		rb.Push(&Event{Payload: []byte(value)})
 
 		peeked := rb.Peek()
-		if peeked != value {
-			t.Errorf("expected %q, got %q", value, peeked)
+		if peeked == nil || string(peeked.Payload) != value {
+			t.Errorf("expected %q, got %v", value, peeked)
 		}
 
 		// Peek should not remove item
@@ -151,7 +152,7 @@ func FuzzRingBufferIsEmpty(f *testing.F) {
 
 		rb := NewRingBuffer(capacity)
 		for i := 0; i < count; i++ {
-			rb.Push("item")
+			rb.Push(&Event{Payload: []byte("item")})
 		}
 
 		if rb.IsEmpty() != (rb.Len() == 0) {
@@ -172,10 +173,10 @@ func FuzzRingBufferIsFull(f *testing.F) {
 
 		rb := NewRingBuffer(capacity)
 		for i := 0; i < count; i++ {
-			rb.Push("item")
+			rb.Push(&Event{Payload: []byte("item")})
 		}
 
-		if rb.IsFull() != (rb.Len() == capacity) {
+		if rb.IsFull() != (rb.Len() == int64(capacity)) {
 			t.Errorf("IsFull() mismatch with Len()")
 		}
 	})

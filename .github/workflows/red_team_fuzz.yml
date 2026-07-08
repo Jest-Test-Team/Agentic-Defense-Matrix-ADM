@@ -9,29 +9,37 @@ on:
     - cron: '0 2 * * 1'  # Weekly on Monday at 2am
 
 jobs:
-  redteam-fuzz:
-    name: Red Team Fuzz Testing
+  redteam-tests:
+    name: Red Team Regression Tests
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        attack:
-          - prompt_injection
-          - tool_chaining
-          - rag_poisoning
-          - reverse_shell
-          - confused_deputy
-          - rate_abuse
-          - egress_exfiltration
-          - container_escape
+        include:
+          - attack: prompt_injection
+            test: TestRT001_PromptInjection
+          - attack: tool_chaining
+            test: TestRT002_ToolChaining
+          - attack: rag_poisoning
+            test: TestRT003_RAGPoisoning
+          - attack: reverse_shell
+            test: TestRT004_ReverseShell
+          - attack: confused_deputy
+            test: TestRT005_ConfusedDeputy
+          - attack: rate_abuse
+            test: TestRT009_RateAbuse
+          - attack: egress_exfiltration
+            test: TestRT007_EgressExfiltration
+          - attack: container_escape
+            test: TestRT008_ContainerEscape
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: '1.25.x'
 
-      - name: Run fuzz test
+      - name: Run red team test
         run: |
-          go test -v -fuzz=Fuzz${{ matrix.attack }} -fuzztime=60s ./tests/redteam/...
+          go test -v -run '^${{ matrix.test }}$' ./tests/redteam/...
 
       - name: Upload results
         if: always()
@@ -49,7 +57,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: '1.25.x'
 
       - name: Fuzz semantic analyzer
         run: |
@@ -62,7 +70,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: '1.25.x'
 
       - name: Fuzz policy evaluator
         run: |

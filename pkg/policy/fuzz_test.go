@@ -60,8 +60,8 @@ func FuzzPolicyEvaluate(f *testing.F) {
 				"executor":   {"run_command", "http_request", "write_file"},
 				"summarizer": {"read_conversation"},
 			}
-			for _, t := range validTools[role] {
-				if t == tool {
+			for _, allowedTool := range validTools[role] {
+				if allowedTool == tool {
 					t.Logf("Expected allowed for role=%s tool=%s but got denied", role, tool)
 				}
 			}

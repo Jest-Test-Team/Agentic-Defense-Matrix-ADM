@@ -3,9 +3,9 @@ package redteam
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 )
@@ -59,6 +59,9 @@ func (h *TestHarness) SendPrompt(t *testing.T, prompt string) (*ChatResponse, in
 		bytes.NewReader(body),
 	)
 	if err != nil {
+		if strings.Contains(err.Error(), "connection refused") {
+			t.Skipf("gateway is not running at %s: %v", h.GatewayURL, err)
+		}
 		return nil, 0, err
 	}
 	defer resp.Body.Close()

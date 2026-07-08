@@ -21,6 +21,7 @@ type Event struct {
 // RingBuffer is a lock-free single-producer single-consumer ring buffer.
 type RingBuffer struct {
 	capacity int64
+	limit    int64
 	head     int64 // write position
 	tail     int64 // read position
 	dropped  int64
@@ -30,10 +31,20 @@ type RingBuffer struct {
 
 // New creates a ring buffer with the given capacity.
 func New(capacity int) *RingBuffer {
-	return &RingBuffer{
-		capacity: int64(capacity),
-		buffer:   make([]*Event, capacity),
+	if capacity < 1 {
+		capacity = 1
 	}
+
+	return &RingBuffer{
+		capacity: int64(capacity + 1),
+		limit:    int64(capacity),
+		buffer:   make([]*Event, capacity+1),
+	}
+}
+
+// NewRingBuffer creates a ring buffer with the given capacity.
+func NewRingBuffer(capacity int) *RingBuffer {
+	return New(capacity)
 }
 
 // Push adds an event to the buffer. Returns false if buffer is full (event dropped).
@@ -114,7 +125,17 @@ func (rb *RingBuffer) Len() int64 {
 
 // Cap returns the buffer capacity.
 func (rb *RingBuffer) Cap() int64 {
-	return rb.capacity
+	return rb.limit
+}
+
+// IsEmpty returns true when the buffer has no events.
+func (rb *RingBuffer) IsEmpty() bool {
+	return rb.Len() == 0
+}
+
+// IsFull returns true when the buffer cannot accept another event.
+func (rb *RingBuffer) IsFull() bool {
+	return rb.Len() == rb.Cap()
 }
 
 // Dropped returns the total number of dropped events.

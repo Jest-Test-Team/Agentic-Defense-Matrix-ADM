@@ -50,6 +50,11 @@ impl Watchdog {
         // Start telemetry export
         self.telemetry.start_export_loop().await;
 
+        self.listen_for_gateway().await
+    }
+
+    #[cfg(unix)]
+    async fn listen_for_gateway(&self) -> Result<(), Box<dyn std::error::Error>> {
         // Start Unix socket listener for Gateway communication
         let socket_path = self.config.socket_path().to_string();
         info!("Listening on socket: {}", socket_path);
@@ -83,6 +88,13 @@ impl Watchdog {
         }
     }
 
+    #[cfg(not(unix))]
+    async fn listen_for_gateway(&self) -> Result<(), Box<dyn std::error::Error>> {
+        warn!("Gateway Unix socket listener is disabled on this platform");
+        futures::future::pending::<()>().await;
+        Ok(())
+    }
+
     pub async fn add_session(&self, session: config::SessionInfo) {
         let mut sessions = self.sessions.write().await;
         sessions.push(session);
@@ -113,6 +125,7 @@ pub struct WatchdogStats {
     pub connections_blocked: u64,
 }
 
+#[cfg(unix)]
 async fn handle_connection(
     mut stream: tokio::net::UnixStream,
     sessions: Arc<RwLock<Vec<config::SessionInfo>>>,
