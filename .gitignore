@@ -78,3 +78,5 @@ docs/battle-setup.local.md
 deploy
 deploy/terraform/.terraform.lock.hcl
 deploy/terraform/
+greenteam_agent
+redteam_agent
