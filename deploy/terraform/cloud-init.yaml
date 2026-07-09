@@ -14,11 +14,16 @@ packages:
   - jq
 
 users:
+  # '- default' preserves the OL8 'opc' user and its metadata ssh key injection
+  # (ADM_SSH_PUBLIC_KEY). Without it cloud-init drops opc and no one can SSH in.
+  - default
   - name: adm
     shell: /bin/bash
     home: /home/adm
     groups: docker
     sudo: ALL=(ALL) NOPASSWD:ALL
+    ssh_authorized_keys:
+      - ${ssh_public_key}
 
 write_files:
   - path: /etc/docker/daemon.json

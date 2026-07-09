@@ -67,34 +67,43 @@ else
     sudo -u $ADM_USER git -C "$ADM_REPO" pull
 fi
 
-# Pull Ollama model
-log "Pulling Ollama model (${ADM_OLLAMA_MODEL})..."
-docker run -d --name adm-ollama-pull \
-    -v ollama-models:/root/.ollama \
-    ollama/ollama:latest \
-    ollama pull ${ADM_OLLAMA_MODEL} || warn "Ollama pull may take a while"
+# In battle mode (a DATABASE_URL is configured) battle-up.sh starts a trimmed,
+# memory-fit stack right after this script, so skip the full stack + model pull
+# here to avoid over-committing the 1 GB micro.
+if [[ -n "${DATABASE_URL:-}" ]]; then
+    log "Battle mode detected; delegating stack + model startup to battle-up.sh"
+    cd "$ADM_REPO"
+    log "Pre-pulling ADM images..."
+    sudo -u $ADM_USER docker compose pull || warn "Some images failed to pull (are the GHCR packages public?)"
+else
+    # Pull Ollama model
+    log "Pulling Ollama model (${ADM_OLLAMA_MODEL})..."
+    docker run -d --name adm-ollama-pull \
+        -v ollama-models:/root/.ollama \
+        ollama/ollama:latest \
+        ollama pull ${ADM_OLLAMA_MODEL} || warn "Ollama pull may take a while"
 
-# Wait for model download
-log "Waiting for model download..."
-for i in {1..120}; do
-    if docker exec adm-ollama-pull ollama list 2>/dev/null | grep -q "${ADM_OLLAMA_MODEL}"; then
-        break
-    fi
-    sleep 5
-done
+    # Wait for model download
+    log "Waiting for model download..."
+    for i in {1..120}; do
+        if docker exec adm-ollama-pull ollama list 2>/dev/null | grep -q "${ADM_OLLAMA_MODEL}"; then
+            break
+        fi
+        sleep 5
+    done
 
-# Stop pull container
-docker stop adm-ollama-pull 2>/dev/null || true
-docker rm adm-ollama-pull 2>/dev/null || true
+    # Stop pull container
+    docker stop adm-ollama-pull 2>/dev/null || true
+    docker rm adm-ollama-pull 2>/dev/null || true
 
-# Pull prebuilt images (from GHCR) and start ADM stack. The 1 GB micro cannot
-# compile Go/Rust on-box, so we pull rather than build.
-log "Pulling ADM images..."
-cd "$ADM_REPO"
-sudo -u $ADM_USER docker compose pull || warn "Some images failed to pull (are the GHCR packages public?)"
+    # Pull prebuilt images (from GHCR) and start the full stack.
+    log "Pulling ADM images..."
+    cd "$ADM_REPO"
+    sudo -u $ADM_USER docker compose pull || warn "Some images failed to pull (are the GHCR packages public?)"
 
-log "Starting ADM stack..."
-sudo -u $ADM_USER docker compose up -d --no-build
+    log "Starting ADM stack..."
+    sudo -u $ADM_USER docker compose up -d --no-build
+fi
 
 # Wait for health checks
 log "Waiting for services to be healthy..."

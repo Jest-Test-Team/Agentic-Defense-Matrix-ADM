@@ -50,8 +50,17 @@ echo "[battle] pulling prebuilt images from GHCR..."
 "${BATTLE[@]}" pull --ignore-buildable 2>/dev/null || "${BATTLE[@]}" pull || \
   echo "[battle] WARNING: image pull incomplete; are the GHCR packages public?"
 
-echo "[battle] bringing up base blue-team stack..."
-"${BATTLE[@]}" up -d --no-build redis ollama gateway siem policy planner executor summarizer
+# Essential services only. On the 1 GB micro the observability/update/endpoint
+# extras (otel-collector, control-plane, watchdog) are dropped to fit memory;
+# set ADM_BATTLE_FULL=true to run everything.
+BASE_SVCS=(redis ollama gateway siem policy planner executor summarizer)
+OVERLAY_SVCS=(analysis redteam greenteam)
+if [[ "${ADM_BATTLE_FULL:-false}" == "true" ]]; then
+  BASE_SVCS+=(otel-collector control-plane watchdog)
+fi
+
+echo "[battle] bringing up base blue-team stack (${BASE_SVCS[*]})..."
+"${BATTLE[@]}" up -d --no-build "${BASE_SVCS[@]}"
 
 echo "[battle] waiting for ollama to accept commands..."
 for _ in $(seq 1 60); do
@@ -63,8 +72,8 @@ echo "[battle] pulling tiny model '$MODEL' (fits the 1 GB micro)..."
 docker exec adm-ollama ollama pull "$MODEL" || \
   echo "[battle] WARNING: model pull failed; the gateway may not answer chat attacks"
 
-echo "[battle] launching battle overlay (analysis, redteam, greenteam)..."
-"${BATTLE[@]}" up -d --no-build
+echo "[battle] launching battle overlay (${OVERLAY_SVCS[*]})..."
+"${BATTLE[@]}" up -d --no-build "${OVERLAY_SVCS[@]}"
 
 echo
 echo "[battle] up. Services:"

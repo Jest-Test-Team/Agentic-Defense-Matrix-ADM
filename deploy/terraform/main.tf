@@ -374,6 +374,7 @@ resource "oci_core_instance" "adm_instance" {
       battle_database_url    = var.battle_database_url
       battle_elastic_url     = var.battle_elastic_url
       battle_ollama_model    = var.battle_ollama_model
+      ssh_public_key         = var.ssh_public_key
     }))
   }
 
