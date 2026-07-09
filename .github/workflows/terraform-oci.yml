@@ -45,6 +45,11 @@ on:
         options:
           - auto
           - micro
+      cleanup_axiom_volumes:
+        description: Delete the orphaned axiom-* boot volumes in Door_God before applying (they block the boot volume quota)
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -165,6 +170,33 @@ jobs:
           printf '%s' "$OCI_PRIVATE_KEY" > "$RUNNER_TEMP/oci_api_key.pem"
           chmod 600 "$RUNNER_TEMP/oci_api_key.pem"
           echo "TF_VAR_private_key_path=$RUNNER_TEMP/oci_api_key.pem" >> "$GITHUB_ENV"
+
+      - name: Delete orphaned axiom boot volumes
+        if: github.event_name == 'workflow_dispatch' && inputs.cleanup_axiom_volumes
+        env:
+          OCI_CLI_USER: ${{ secrets.OCI_USER_OCID }}
+          OCI_CLI_TENANCY: ${{ secrets.OCI_TENANCY_OCID }}
+          OCI_CLI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
+          OCI_CLI_REGION: ${{ secrets.OCI_REGION || 'us-ashburn-1' }}
+          OCI_CLI_SUPPRESS_FILE_PERMISSIONS_WARNING: 'True'
+        run: |
+          pip install --quiet oci-cli
+          export OCI_CLI_KEY_FILE="$RUNNER_TEMP/oci_api_key.pem"
+          COMP_ID=$(oci iam compartment list --compartment-id "$OCI_CLI_TENANCY" --compartment-id-in-subtree true --all | jq -r '.data[] | select(.name=="Door_God") | .id' | head -1)
+          if [ -z "$COMP_ID" ]; then
+            echo "Door_God compartment not found; nothing to clean up."
+            exit 0
+          fi
+          AD=$(oci iam availability-domain list --compartment-id "$OCI_CLI_TENANCY" | jq -r '.data[0].name')
+          IDS=$(oci bv boot-volume list --compartment-id "$COMP_ID" --availability-domain "$AD" --all | jq -r '.data[] | select(."lifecycle-state"=="AVAILABLE") | select(."display-name" | startswith("axiom")) | .id')
+          if [ -z "$IDS" ]; then
+            echo "No orphaned axiom boot volumes found."
+            exit 0
+          fi
+          for id in $IDS; do
+            echo "Deleting orphaned axiom boot volume ...${id: -12}"
+            oci bv boot-volume delete --boot-volume-id "$id" --force
+          done
 
       - name: Terraform init
         run: terraform init
