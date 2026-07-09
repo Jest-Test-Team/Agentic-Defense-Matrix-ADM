@@ -23,42 +23,79 @@ jobs:
   release:
     name: Create Release
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.ver.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Resolve release tag
+        id: ver
+        shell: bash
+        run: |
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            tag="${{ inputs.tag }}"
+          else
+            tag="${GITHUB_REF_NAME}"
+          fi
+
+          if [[ -z "${tag}" || "${tag}" != v* ]]; then
+            echo "Release tag must be non-empty and start with 'v'." >&2
+            exit 1
+          fi
+
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
       - name: Create release
-        uses: softprops/action-gh-release@v1
-        with:
-          generate_release_notes: true
-          draft: false
-          prerelease: false
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          tag="${{ steps.ver.outputs.tag }}"
+
+          if gh release view "${tag}" >/dev/null 2>&1; then
+            echo "Release ${tag} already exists."
+          else
+            gh release create "${tag}" --generate-notes --target "${GITHUB_SHA}"
+          fi
 
   build-and-package:
     name: Build & Package (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
     needs: release
+    defaults:
+      run:
+        shell: bash
     strategy:
       matrix:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
+            goos: linux
+            goarch: amd64
             ext: ''
             package: tar.gz
           - os: macos-latest
             target: aarch64-apple-darwin
+            goos: darwin
+            goarch: arm64
             ext: ''
             package: pkg
           - os: macos-13
             target: x86_64-apple-darwin
+            goos: darwin
+            goarch: amd64
             ext: ''
             package: pkg
           - os: windows-latest
             target: x86_64-pc-windows-msvc
+            goos: windows
+            goarch: amd64
             ext: .exe
             package: msi
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release.outputs.tag }}
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
@@ -68,16 +105,16 @@ jobs:
 
       - name: Build Go services
         env:
-          GOOS: ${{ matrix.target == 'x86_64-pc-windows-msvc' && 'windows' || startsWith(matrix.target, 'aarch64-apple') && 'darwin' || startsWith(matrix.target, 'x86_64-apple') && 'darwin' || 'linux' }}
-          GOARCH: amd64
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
         run: |
           mkdir -p dist
-          CGO_ENABLED=0 go build -ldflags="-w -s" -o dist/adm-gateway${ext} ./cmd/gateway
-          CGO_ENABLED=0 go build -ldflags="-w -s" -o dist/adm-siem${ext} ./cmd/siem_engine
-          CGO_ENABLED=0 go build -ldflags="-w -s" -o dist/adm-planner${ext} ./cmd/agent/planner
-          CGO_ENABLED=0 go build -ldflags="-w -s" -o dist/adm-executor${ext} ./cmd/agent/executor
-          CGO_ENABLED=0 go build -ldflags="-w -s" -o dist/adm-summarizer${ext} ./cmd/agent/summarizer
-          CGO_ENABLED=0 go build -ldflags="-w -s" -o dist/adm-control-plane${ext} ./cmd/control_plane
+          CGO_ENABLED=0 go build -ldflags="-w -s" -o dist/adm-gateway${{ matrix.ext }} ./cmd/gateway
+          CGO_ENABLED=0 go build -ldflags="-w -s" -o dist/adm-siem${{ matrix.ext }} ./cmd/siem_engine
+          CGO_ENABLED=0 go build -ldflags="-w -s" -o dist/adm-planner${{ matrix.ext }} ./cmd/agent/planner
+          CGO_ENABLED=0 go build -ldflags="-w -s" -o dist/adm-executor${{ matrix.ext }} ./cmd/agent/executor
+          CGO_ENABLED=0 go build -ldflags="-w -s" -o dist/adm-summarizer${{ matrix.ext }} ./cmd/agent/summarizer
+          CGO_ENABLED=0 go build -ldflags="-w -s" -o dist/adm-control-plane${{ matrix.ext }} ./cmd/control_plane
 
       - name: Build Rust watchdog
         run: cargo build --release --target ${{ matrix.target }}
@@ -89,14 +126,16 @@ jobs:
       - name: Generate checksums
         run: |
           cd dist
-          sha256sum * > checksums-sha256.txt
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum * > checksums-sha256.txt
+          else
+            shasum -a 256 * > checksums-sha256.txt
+          fi
 
       - name: Upload release assets
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            dist/*
-            dist/checksums-sha256.txt
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ needs.release.outputs.tag }}" dist/* --clobber
 
   docker-images:
     name: Docker image (${{ matrix.name }})
@@ -122,10 +161,12 @@ jobs:
           - { name: policy,        file: deploy/Dockerfile.opa,      target: '' }
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release.outputs.tag }}
 
       - name: Resolve release tag
         id: ver
-        run: echo "tag=${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}" >> "$GITHUB_OUTPUT"
+        run: echo "tag=${{ needs.release.outputs.tag }}" >> "$GITHUB_OUTPUT"
 
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
