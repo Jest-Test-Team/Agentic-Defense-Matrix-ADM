@@ -46,10 +46,6 @@ if [[ -n "${GHCR_TOKEN:-}" && -n "${GHCR_USER:-}" ]]; then
     echo "[battle] WARNING: GHCR login failed; assuming public images"
 fi
 
-echo "[battle] pulling prebuilt images from GHCR..."
-"${BATTLE[@]}" pull --ignore-buildable 2>/dev/null || "${BATTLE[@]}" pull || \
-  echo "[battle] WARNING: image pull incomplete; are the GHCR packages public?"
-
 # Essential services only. On the 1 GB micro the observability/update/endpoint
 # extras (otel-collector, control-plane, watchdog) are dropped to fit memory;
 # set ADM_BATTLE_FULL=true to run everything. Ollama is only started when the
@@ -64,6 +60,12 @@ fi
 if [[ "${ADM_BATTLE_FULL:-false}" == "true" ]]; then
   BASE_SVCS+=(otel-collector control-plane watchdog)
 fi
+
+# Pull only the images we will actually start — critically this skips the ~3 GB
+# Ollama image in Groq mode, which would otherwise waste time and disk.
+echo "[battle] pulling prebuilt images from GHCR (${BASE_SVCS[*]} ${OVERLAY_SVCS[*]})..."
+"${BATTLE[@]}" pull "${BASE_SVCS[@]}" "${OVERLAY_SVCS[@]}" || \
+  echo "[battle] WARNING: image pull incomplete; are the GHCR packages public?"
 
 echo "[battle] bringing up base blue-team stack (${BASE_SVCS[*]})..."
 "${BATTLE[@]}" up -d --no-build "${BASE_SVCS[@]}"

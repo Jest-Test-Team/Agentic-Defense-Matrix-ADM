@@ -71,10 +71,12 @@ fi
 # memory-fit stack right after this script, so skip the full stack + model pull
 # here to avoid over-committing the 1 GB micro.
 if [[ -n "${DATABASE_URL:-}" ]]; then
-    log "Battle mode detected; delegating stack + model startup to battle-up.sh"
-    cd "$ADM_REPO"
-    log "Pre-pulling ADM images..."
-    sudo -u $ADM_USER docker compose pull || warn "Some images failed to pull (are the GHCR packages public?)"
+    # battle-up.sh pulls exactly the services it starts (excluding the ~3 GB
+    # Ollama image in Groq mode) and launches the trimmed stack. Do nothing else
+    # here: pulling the full compose set or waiting on a stack we won't start
+    # just wastes ~20 min and disk on the 1 GB micro.
+    log "Battle mode detected; delegating image pull + startup to battle-up.sh"
+    exit 0
 else
     # Pull Ollama model
     log "Pulling Ollama model (${ADM_OLLAMA_MODEL})..."
