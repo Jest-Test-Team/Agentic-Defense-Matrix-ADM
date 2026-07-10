@@ -18,6 +18,95 @@ pub async fn health() -> impl IntoResponse {
     Json(json!({ "status": "ok" }))
 }
 
+// ---- /api/system : consolidated status of every stack component -------------
+
+enum Probe {
+    /// GET the URL, healthy if status < 400.
+    Http(&'static str),
+    /// TCP connect to host:port.
+    Tcp(&'static str),
+    /// SELECT 1 against Postgres.
+    Db,
+    /// Elasticsearch enabled + reachable.
+    Elastic,
+    /// GET {ADM_LLM_BASE_URL}/models (bearer) — the hosted LLM.
+    Llm,
+    /// Always up (the analysis engine answering means it's up).
+    SelfUp,
+}
+
+struct Svc {
+    name: &'static str,
+    tech: &'static str,
+    category: &'static str,
+    detail: &'static str,
+    probe: Probe,
+    /// Optional components are "disabled" (not "down") when unreachable —
+    /// otel/watchdog/control-plane are dropped on the 1 GB micro.
+    optional: bool,
+}
+
+fn catalog() -> Vec<Svc> {
+    use Probe::*;
+    vec![
+        Svc { name: "API Gateway", tech: "Go (Echo)", category: "Edge", detail: "Request interception, semantic analysis, routing", probe: Http("http://gateway:8080/v1/health"), optional: false },
+        Svc { name: "Analysis Engine", tech: "Rust (axum)", category: "Edge", detail: "Battle event ingest, scoring, dashboard API", probe: SelfUp, optional: false },
+        Svc { name: "SIEM Engine", tech: "Go", category: "Detection", detail: "Correlation engine + Redis streams", probe: Http("http://siem:9091/health"), optional: false },
+        Svc { name: "Policy Engine", tech: "OPA", category: "Detection", detail: "Rego authorization decisions", probe: Http("http://policy:8181/health"), optional: false },
+        Svc { name: "Planner Agent", tech: "Go + gRPC", category: "Agents", detail: "Task decomposition", probe: Http("http://planner:9081/health"), optional: false },
+        Svc { name: "Executor Agent", tech: "Go + gRPC", category: "Agents", detail: "Tool execution (Docker API)", probe: Http("http://executor:9082/health"), optional: false },
+        Svc { name: "Summarizer Agent", tech: "Go + gRPC", category: "Agents", detail: "Response summarization", probe: Http("http://summarizer:9083/health"), optional: false },
+        Svc { name: "LLM Backend", tech: "Groq / Ollama", category: "Agents", detail: "Chat-completion inference", probe: Llm, optional: false },
+        Svc { name: "Sandboxing", tech: "Docker API", category: "Runtime", detail: "Ephemeral per-agent containers (via executor)", probe: Http("http://executor:9082/health"), optional: false },
+        Svc { name: "Storage", tech: "Redis 7", category: "Runtime", detail: "SIEM hot path + session store", probe: Tcp("redis:6379"), optional: false },
+        Svc { name: "Durable Log", tech: "Neon Postgres", category: "Data", detail: "Retained battle-event log", probe: Db, optional: false },
+        Svc { name: "Search / Aggregation", tech: "Elasticsearch", category: "Data", detail: "Full-text + aggregation index", probe: Elastic, optional: true },
+        Svc { name: "Observability", tech: "OpenTelemetry", category: "Ops", detail: "Traces, metrics, logs", probe: Http("http://otel-collector:13133/"), optional: true },
+        Svc { name: "Endpoint Watchdog", tech: "Rust", category: "Ops", detail: "macOS ES / Windows WFP syscall interception", probe: Tcp("watchdog:0"), optional: true },
+    ]
+}
+
+pub async fn system(State(st): State<Arc<AppState>>) -> impl IntoResponse {
+    let http = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(3))
+        .build()
+        .unwrap_or_default();
+
+    let results = futures::future::join_all(catalog().into_iter().map(|s| {
+        let http = http.clone();
+        let st = st.clone();
+        async move {
+            let up = match &s.probe {
+                Probe::SelfUp => true,
+                Probe::Http(url) => http.get(*url).send().await.map(|r| r.status().as_u16() < 400).unwrap_or(false),
+                Probe::Tcp(hp) => tokio::time::timeout(std::time::Duration::from_secs(2), tokio::net::TcpStream::connect(*hp)).await.map(|r| r.is_ok()).unwrap_or(false),
+                Probe::Db => sqlx::query("SELECT 1").execute(&st.pool).await.is_ok(),
+                Probe::Elastic => st.elastic.enabled(),
+                Probe::Llm => probe_llm(&http).await,
+            };
+            let status = if up { "up" } else if s.optional { "disabled" } else { "down" };
+            json!({ "name": s.name, "tech": s.tech, "category": s.category, "detail": s.detail, "status": status })
+        }
+    }))
+    .await;
+
+    Json(json!({ "services": results }))
+}
+
+async fn probe_llm(http: &reqwest::Client) -> bool {
+    let base = std::env::var("ADM_LLM_BASE_URL").unwrap_or_default();
+    if base.is_empty() {
+        return false;
+    }
+    let mut req = http.get(format!("{}/models", base.trim_end_matches('/')));
+    if let Ok(key) = std::env::var("ADM_LLM_API_KEY") {
+        if !key.is_empty() {
+            req = req.bearer_auth(key);
+        }
+    }
+    req.send().await.map(|r| r.status().as_u16() < 400).unwrap_or(false)
+}
+
 pub async fn ready(State(st): State<Arc<AppState>>) -> impl IntoResponse {
     match sqlx::query("SELECT 1").execute(&st.pool).await {
         Ok(_) => (StatusCode::OK, Json(json!({ "ready": true }))),

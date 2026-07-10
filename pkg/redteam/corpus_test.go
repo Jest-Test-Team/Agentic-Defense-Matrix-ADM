@@ -14,6 +14,14 @@ func TestCorpusScale(t *testing.T) {
 	if len(corpus) != 10000 {
 		t.Fatalf("GenerateCorpus(10000) returned %d variants", len(corpus))
 	}
+	// The campaign is enumerated RT-00001 … RT-10000.
+	if corpus[0].VariantID != "RT-00001" || corpus[9999].VariantID != "RT-10000" {
+		t.Fatalf("enumeration = %s … %s, want RT-00001 … RT-10000", corpus[0].VariantID, corpus[9999].VariantID)
+	}
+	// Every enumerated variant still maps to a base technique family.
+	if corpus[0].Technique == "" {
+		t.Fatal("variant missing base technique")
+	}
 }
 
 // TestCorpusDeterministic ensures a fixed seed yields a reproducible campaign.

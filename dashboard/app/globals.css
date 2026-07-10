@@ -66,11 +66,20 @@ h2.section {
 }
 
 /* status pills row */
-.status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px,1fr)); gap: 12px; }
+.svc-group { margin-bottom: 12px; }
+.svc-cat { color: var(--ink-3); font-size: 11px; letter-spacing: .5px; text-transform: uppercase; margin: 4px 2px 8px; }
+.status-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px,1fr)); gap: 10px; }
 .status-card {
   background: var(--surface-1); border: 1px solid var(--line); border-radius: 12px;
-  padding: 14px 16px; display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px; display: flex; align-items: flex-start; gap: 11px;
 }
+.svc-meta { min-width: 0; }
+.svc-name { font-weight: 650; font-size: 13.5px; }
+.svc-tech { color: var(--ink-3); font-weight: 400; font-size: 11px; margin-left: 4px; }
+.svc-detail { color: var(--ink-3); font-size: 11.5px; margin: 2px 0 4px; line-height: 1.35;
+              overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.good-text { color: var(--good); } .warn-text { color: var(--yellow); } .crit-text { color: var(--crit); }
+.val.good-text, .val.warn-text, .val.crit-text { font-size: 12.5px; font-weight: 650; }
 .status-card .pill {
   width: 34px; height: 34px; border-radius: 9px; flex: 0 0 auto;
   display: grid; place-items: center; font-size: 16px;

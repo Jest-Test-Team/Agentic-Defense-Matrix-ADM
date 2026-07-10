@@ -67,6 +67,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/events", get(handlers::events))
         .route("/api/timeline", get(handlers::timeline))
         .route("/api/stats", get(handlers::stats))
+        .route("/api/system", get(handlers::system))
         .route("/api/search", get(handlers::search))
         .route("/api/stream", get(handlers::stream))
         .layer(CorsLayer::permissive())

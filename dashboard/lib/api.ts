@@ -72,6 +72,14 @@ export interface SessionRow {
   mttr_seconds: number | null;
 }
 
+export interface SystemService {
+  name: string;
+  tech: string;
+  category: string;
+  detail: string;
+  status: "up" | "down" | "disabled";
+}
+
 export interface BattleEvent {
   id?: string;
   ts?: string;
@@ -117,6 +125,7 @@ export async function probe(url: string): Promise<boolean> {
 
 export const api = {
   stats: (c: ApiConfig) => getJSON<Stats>(`${c.analysis}/api/stats`),
+  system: (c: ApiConfig) => getJSON<{ services: SystemService[] }>(`${c.analysis}/api/system`),
   timeline: (c: ApiConfig, limit = 40) =>
     getJSON<{ sessions: SessionRow[] }>(`${c.analysis}/api/timeline?limit=${limit}`),
   analysisReady: (c: ApiConfig) => probe(`${c.analysis}/ready`),

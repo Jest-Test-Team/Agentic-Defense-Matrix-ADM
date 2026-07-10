@@ -17,17 +17,11 @@ export interface Dict {
   aboutHowto: string;
 
   systemStatus: string;
-  analysisEngine: string;
-  neonPostgres: string;
-  gatewayTarget: string;
-  elasticsearch: string;
-  ok: string;
-  ready: string;
-  up: string;
-  indexing: string;
-  postgresOnly: string;
-  down: string;
+  svcUp: string;
+  svcDown: string;
+  svcDisabled: string;
   checking: string;
+  cat: Record<string, string>;
 
   scoreboard: string;
   attacks: string;
@@ -81,17 +75,11 @@ export const translations: Record<Lang, Dict> = {
     aboutHowto: "Every event is logged to a database and scored, so you can see in real time how well the defenses hold. The scoreboard below updates every few seconds; the feed on the left streams each attack and defense as it happens.",
 
     systemStatus: "System status",
-    analysisEngine: "Analysis engine",
-    neonPostgres: "Neon Postgres",
-    gatewayTarget: "Gateway (target)",
-    elasticsearch: "Elasticsearch (Bonsai)",
-    ok: "ok",
-    ready: "ready",
-    up: "up",
-    indexing: "indexing",
-    postgresOnly: "postgres-only",
-    down: "down",
+    svcUp: "up",
+    svcDown: "down",
+    svcDisabled: "disabled",
     checking: "checking…",
+    cat: { Edge: "Edge", Detection: "Detection", Agents: "Agents", Runtime: "Runtime", Data: "Data", Ops: "Ops" },
 
     scoreboard: "Battle scoreboard",
     attacks: "Attacks",
@@ -145,17 +133,11 @@ export const translations: Record<Lang, Dict> = {
     aboutHowto: "每一筆事件都會寫入資料庫並計分，讓你即時看到防禦守得有多穩。下方的計分板每幾秒更新一次；左側的即時動態會把每一次攻擊與防禦即時串流出來。",
 
     systemStatus: "系統狀態",
-    analysisEngine: "分析引擎",
-    neonPostgres: "Neon 資料庫",
-    gatewayTarget: "閘道（受攻擊目標）",
-    elasticsearch: "Elasticsearch（Bonsai）",
-    ok: "正常",
-    ready: "就緒",
-    up: "運行中",
-    indexing: "索引中",
-    postgresOnly: "僅用資料庫",
-    down: "離線",
+    svcUp: "運行中",
+    svcDown: "離線",
+    svcDisabled: "未啟用",
     checking: "檢查中…",
+    cat: { Edge: "邊界", Detection: "偵測", Agents: "代理", Runtime: "執行環境", Data: "資料", Ops: "維運" },
 
     scoreboard: "攻防計分板",
     attacks: "攻擊次數",

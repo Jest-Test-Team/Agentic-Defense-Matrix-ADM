@@ -9,16 +9,12 @@ import {
   type Stats,
   type SessionRow,
   type BattleEvent,
+  type SystemService,
 } from "@/lib/api";
 import { translations, getLang, setLang, type Lang, type Dict } from "@/lib/i18n";
 
 const pct = (x: number) => `${(x * 100).toFixed(0)}%`;
-
-type Health = {
-  analysis: boolean | null;
-  neon: boolean | null;
-  gateway: boolean | null;
-};
+const CATEGORY_ORDER = ["Edge", "Detection", "Agents", "Runtime", "Data", "Ops"];
 
 export default function Page() {
   const [lang, setLangState] = useState<Lang>("en");
@@ -27,7 +23,7 @@ export default function Page() {
   const [cfg, setCfg] = useState<ApiConfig | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
   const [sessions, setSessions] = useState<SessionRow[]>([]);
-  const [health, setHealth] = useState<Health>({ analysis: null, neon: null, gateway: null });
+  const [services, setServices] = useState<SystemService[]>([]);
   const [events, setEvents] = useState<BattleEvent[]>([]);
   const [connected, setConnected] = useState<boolean | null>(null);
   const [mixedContent, setMixedContent] = useState(false);
@@ -65,27 +61,27 @@ export default function Page() {
     } catch {}
   }, [cfg]);
 
-  const refreshHealth = useCallback(async () => {
+  const refreshSystem = useCallback(async () => {
     if (!cfg) return;
-    const [analysis, neon, gateway] = await Promise.all([
-      api.analysisHealth(cfg),
-      api.analysisReady(cfg),
-      api.gatewayHealth(cfg),
-    ]);
-    setHealth({ analysis, neon, gateway });
+    try {
+      const s = await api.system(cfg);
+      setServices(s.services ?? []);
+    } catch {
+      setServices([]);
+    }
   }, [cfg]);
 
   useEffect(() => {
     if (!cfg) return;
     refresh();
-    refreshHealth();
+    refreshSystem();
     const a = setInterval(refresh, 3000);
-    const b = setInterval(refreshHealth, 8000);
+    const b = setInterval(refreshSystem, 8000);
     return () => {
       clearInterval(a);
       clearInterval(b);
     };
-  }, [cfg, refresh, refreshHealth]);
+  }, [cfg, refresh, refreshSystem]);
 
   useEffect(() => {
     if (!cfg) return;
@@ -147,19 +143,22 @@ export default function Page() {
         </div>
 
         <h2 className="section">{t.systemStatus}</h2>
-        <div className="status-grid">
-          <StatusCard label={t.analysisEngine} ok={health.analysis} okText={t.ok} downText={t.down} checkingText={t.checking} />
-          <StatusCard label={t.neonPostgres} ok={health.neon} okText={t.ready} downText={t.down} checkingText={t.checking} />
-          <StatusCard label={t.gatewayTarget} ok={health.gateway} okText={t.up} downText={t.down} checkingText={t.checking} />
-          <StatusCard
-            label={t.elasticsearch}
-            ok={stats ? stats.elastic_enabled : null}
-            okText={t.indexing}
-            downText={t.postgresOnly}
-            checkingText={t.checking}
-            neutralOff
-          />
-        </div>
+        {services.length === 0 ? (
+          <div className="status-grid">
+            <div className="status-card"><div className="pill warn">…</div><div><div className="val">{t.checking}</div></div></div>
+          </div>
+        ) : (
+          CATEGORY_ORDER.filter((cat) => services.some((s) => s.category === cat)).map((cat) => (
+            <div key={cat} className="svc-group">
+              <div className="svc-cat">{t.cat[cat] ?? cat}</div>
+              <div className="status-grid">
+                {services.filter((s) => s.category === cat).map((s) => (
+                  <ServiceCard key={s.name} svc={s} t={t} />
+                ))}
+              </div>
+            </div>
+          ))
+        )}
 
         <h2 className="section">{t.scoreboard}</h2>
         <div className="tiles">
@@ -230,30 +229,17 @@ export default function Page() {
   );
 }
 
-function StatusCard({
-  label,
-  ok,
-  okText,
-  downText,
-  checkingText,
-  neutralOff = false,
-}: {
-  label: string;
-  ok: boolean | null;
-  okText: string;
-  downText: string;
-  checkingText: string;
-  neutralOff?: boolean;
-}) {
-  const cls = ok === true ? "good" : ok === false ? (neutralOff ? "warn" : "crit") : "warn";
-  const icon = ok === true ? "✓" : ok === false ? (neutralOff ? "○" : "✕") : "…";
-  const val = ok === true ? okText : ok === false ? downText : checkingText;
+function ServiceCard({ svc, t }: { svc: SystemService; t: Dict }) {
+  const cls = svc.status === "up" ? "good" : svc.status === "disabled" ? "warn" : "crit";
+  const icon = svc.status === "up" ? "✓" : svc.status === "disabled" ? "○" : "✕";
+  const word = svc.status === "up" ? t.svcUp : svc.status === "disabled" ? t.svcDisabled : t.svcDown;
   return (
-    <div className="status-card">
+    <div className="status-card" title={svc.detail}>
       <div className={`pill ${cls}`}>{icon}</div>
-      <div>
-        <div className="label">{label}</div>
-        <div className="val">{val}</div>
+      <div className="svc-meta">
+        <div className="svc-name">{svc.name} <span className="svc-tech">{svc.tech}</span></div>
+        <div className="svc-detail">{svc.detail}</div>
+        <div className={`val ${cls}-text`}>{word}</div>
       </div>
     </div>
   );

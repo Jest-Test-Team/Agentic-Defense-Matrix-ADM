@@ -5,7 +5,6 @@
 package redteam
 
 import (
-	"crypto/sha1"
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
@@ -44,7 +43,7 @@ type AttackVariant struct {
 	Payload   string
 	Mutation  string
 	Lang      string
-	// VariantID is a short stable id: "<technique>#<hash>".
+	// VariantID is the enumerated campaign id, "RT-00001" … "RT-<N>".
 	VariantID string
 }
 
@@ -235,7 +234,7 @@ func GenerateCorpus(size int, seed int64) []AttackVariant {
 			for _, m := range mutations {
 				for _, p := range paraphrases {
 					payload := m.fn(p + seedPayload)
-					v := AttackVariant{
+					all = append(all, AttackVariant{
 						Technique: t.ID,
 						Name:      t.Name,
 						Tag:       t.Tag,
@@ -245,10 +244,7 @@ func GenerateCorpus(size int, seed int64) []AttackVariant {
 						Payload:   payload,
 						Mutation:  m.name,
 						Lang:      m.lang,
-					}
-					h := sha1.Sum([]byte(t.ID + m.name + p + seedPayload))
-					v.VariantID = fmt.Sprintf("%s#%s", t.ID, hex.EncodeToString(h[:3]))
-					all = append(all, v)
+					})
 				}
 			}
 		}
@@ -259,6 +255,13 @@ func GenerateCorpus(size int, seed int64) []AttackVariant {
 
 	if size > 0 && size < len(all) {
 		all = all[:size]
+	}
+
+	// Enumerate the campaign: every variant gets a sequential, human-readable id
+	// RT-00001 … RT-<N> (so a 10 000-variant run spans RT-00001 … RT-10000). The
+	// base technique family (RT-001 … RT-030) stays in Technique for grouping.
+	for i := range all {
+		all[i].VariantID = fmt.Sprintf("RT-%05d", i+1)
 	}
 	return all
 }

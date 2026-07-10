@@ -11,6 +11,8 @@
 
 A full red vs. blue vs. green exercise runs continuously on free-tier cloud:
 
+- **Demo video https://youtu.be/K9QCi-esu_g
+
 - **Dashboard (realtime):** https://jest-test-team.github.io/Agentic-Defense-Matrix-ADM/
   — service health, battle scoreboard, per-technique breakdown, live event feed
   (English / 繁體中文).
@@ -24,6 +26,85 @@ that land. Every event is logged to Postgres and scored live. See
 for the full architecture (OCI micro + Neon + Bonsai + Groq + Caddy + GitHub Pages),
 and **[Battle Orchestration](docs/battle-orchestration.md)** for how the exercise
 works.
+
+---
+
+## Architecture (infrastructure & services)
+
+```mermaid
+flowchart TB
+    viewer(["👤 Viewer"])
+
+    subgraph edge["🌐 Cloudflare · GitHub Pages"]
+        pages["📊 Dashboard<br/>static Next.js · HTTPS"]
+        dns["Cloudflare DNS<br/>api.example.org"]
+    end
+    viewer --> pages
+    pages -->|"/api/* + SSE · HTTPS"| dns
+
+    subgraph box["🖥️ OCI Always-Free Micro · Oracle Linux 8 · Docker"]
+        caddy["Caddy<br/>auto-HTTPS :80/:443"]
+        rt["🔴 Red team<br/>continuous attacker"]
+        gr["🟢 Green team<br/>remediation"]
+        an["📊 Analysis Engine<br/>Rust · :8090"]
+        redis[("Redis 7<br/>sessions · streams")]
+        subgraph blue["🔵 Blue team / target"]
+            gw["API Gateway<br/>Go/Echo · :8080"]
+            siem["SIEM Engine<br/>Go · :9091"]
+            opa["Policy Engine<br/>OPA · :8181"]
+        end
+        subgraph agents["Agent services · Go + gRPC"]
+            pl["Planner"]
+            ex["Executor"]
+            su["Summarizer"]
+        end
+    end
+
+    dns --> caddy
+    caddy -->|/v1/*| gw
+    caddy -->|else| an
+    rt -->|attacks| gw
+    gw --> opa
+    gw --> siem
+    gw --> pl & ex & su
+    gr -->|revoke · restart| gw
+    rt & gw & gr -->|battle events| an
+    gw --> redis
+    siem --> redis
+
+    subgraph managed["☁️ Managed services · free tiers"]
+        neon[("Neon Postgres<br/>durable battle log")]
+        bonsai[("Bonsai Elasticsearch<br/>search · aggregation")]
+        groq["Groq<br/>hosted LLM · OpenAI-compatible"]
+    end
+    an -->|durable write| neon
+    an -->|index| bonsai
+    gw & pl & su -->|inference| groq
+
+    subgraph cicd["⚙️ CI/CD & IaC"]
+        gha["GitHub Actions"]
+        ghcr[("GHCR<br/>prebuilt images")]
+        tf["Terraform"]
+    end
+    gha --> ghcr -->|docker pull| box
+    gha --> tf -->|apply| box
+    gha -->|build & publish| pages
+
+    classDef red fill:#e66767,stroke:#b23,color:#fff
+    classDef blue fill:#3987e5,stroke:#245,color:#fff
+    classDef green fill:#199e70,stroke:#064,color:#fff
+    classDef data fill:#4a3aa7,stroke:#312,color:#fff
+    class rt red
+    class gw,siem,opa blue
+    class gr green
+    class neon,bonsai,redis data
+```
+
+**Legend:** 🔴 red attacks · 🔵 blue detects & blocks · 🟢 green remediates ·
+📊 the analysis engine scores everything and serves the dashboard. The 1 GB micro
+runs the containers; Postgres, Elasticsearch, the LLM, and image builds are
+offloaded to free managed clouds. Full detail:
+**[Live Deployment — Infrastructure & Services](docs/architecture/live-deployment.md)**.
 
 ---
 
@@ -193,6 +274,14 @@ agentic-defense-matrix/
 ---
 
 ## Red Team Test Suite
+
+These **30 base techniques** are the taxonomy. At runtime the corpus generator
+(`pkg/redteam`) expands each one through deterministic mutations (base64/hex
+encoding, homoglyphs, zero-width injection, multilingual, nesting, obfuscation,
+paraphrase…) into an enumerated campaign of up to **10 000 concrete variants —
+`RT-00001 … RT-10000`** (capacity ~11 400). The continuous attacker
+(`cmd/redteam_agent`) fires them at the gateway; each variant keeps its base
+technique family for grouping in the dashboard. Reproducible from a fixed seed.
 
 Located in `tests/redteam/`, implemented in Go/Rust:
 
