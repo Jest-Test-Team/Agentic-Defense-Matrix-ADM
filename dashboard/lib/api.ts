@@ -6,8 +6,12 @@
 //   ?api=https://host   -> analysis base URL   (also persisted to localStorage)
 //   ?gw=https://host     -> gateway base URL
 
-const DEFAULT_ANALYSIS = "http://161.33.209.244:8090";
-const DEFAULT_GATEWAY = "http://161.33.209.244:8080";
+// Default to the Cloudflare Worker HTTPS proxy so the bare Pages URL just works
+// (the browser blocks direct HTTP-API calls from the HTTPS page). Override at
+// runtime with ?api=…&gw=… or the Endpoint box. The Worker routes /v1/* to the
+// gateway and everything else to the analysis API, so both use the same host.
+const DEFAULT_ANALYSIS = "https://adm-api-proxy.pcleegood.workers.dev";
+const DEFAULT_GATEWAY = "https://adm-api-proxy.pcleegood.workers.dev";
 
 export interface ApiConfig {
   analysis: string;

@@ -27,16 +27,23 @@ https://jest-test-team.github.io/Agentic-Defense-Matrix-ADM/?api=https://adm-api
 …or paste that URL into the dashboard's **Endpoint** box and click *Save & reload*.
 The choice persists in `localStorage`, so afterwards the bare dashboard URL works.
 
+## Why `.nip.io`
+
+Cloudflare Workers **cannot `fetch()` a raw IP** (it returns error 1003). `nip.io`
+is wildcard DNS that maps `<ip>.nip.io` → `<ip>` with zero setup, giving the
+Worker a hostname to fetch. That's why the vars use
+`http://161.33.209.244.nip.io:8090`, not the bare IP.
+
 ## When the OCI IP changes
 
-Each `replace_instance` deploy gives the box a new public IP. Update the Worker's
-targets and redeploy:
+Each `replace_instance` deploy gives the box a new public IP. Update the embedded
+IP and redeploy:
 
 ```bash
 npx wrangler deploy \
-  --var ADM_ANALYSIS_URL:http://<new-ip>:8090 \
-  --var ADM_GATEWAY_URL:http://<new-ip>:8080
+  --var ADM_ANALYSIS_URL:http://<new-ip>.nip.io:8090 \
+  --var ADM_GATEWAY_URL:http://<new-ip>.nip.io:8080
 ```
 
-(or edit `vars` in `wrangler.jsonc`). A stable IP (OCI reserved public IP) or a
-domain in front of the box avoids this.
+(or edit `vars` in `wrangler.jsonc`). A reserved OCI public IP or a real domain in
+front of the box avoids this.
