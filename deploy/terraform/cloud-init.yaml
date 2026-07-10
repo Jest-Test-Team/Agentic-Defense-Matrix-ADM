@@ -109,7 +109,11 @@ write_files:
       # Disable host firewalld: OCI's NSG (adm-nsg) already restricts ingress to
       # the ADM ports at the network layer, and firewalld's dbus can hang with
       # NoReply on this minimal image and stall provisioning indefinitely.
+      # Then restart docker so it rebuilds the iptables NAT chains that stopping
+      # firewalld flushes (otherwise `docker network create` fails with
+      # "iptables: No chain/target/match by that name").
       systemctl disable --now firewalld >/dev/null 2>&1 || true
+      systemctl restart docker
 
       # 'adm' is a reserved OL8 system account (uid 3, /sbin/nologin), so the
       # cloud-init users: block can't make it a usable login. Force a bash shell,
