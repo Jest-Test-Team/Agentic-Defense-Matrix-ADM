@@ -10,6 +10,7 @@ import {
   type SessionRow,
   type BattleEvent,
 } from "@/lib/api";
+import { translations, getLang, setLang, type Lang, type Dict } from "@/lib/i18n";
 
 const pct = (x: number) => `${(x * 100).toFixed(0)}%`;
 
@@ -20,6 +21,9 @@ type Health = {
 };
 
 export default function Page() {
+  const [lang, setLangState] = useState<Lang>("en");
+  const t = translations[lang];
+
   const [cfg, setCfg] = useState<ApiConfig | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
   const [sessions, setSessions] = useState<SessionRow[]>([]);
@@ -27,13 +31,19 @@ export default function Page() {
   const [events, setEvents] = useState<BattleEvent[]>([]);
   const [connected, setConnected] = useState<boolean | null>(null);
   const [mixedContent, setMixedContent] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(true);
   const esRef = useRef<EventSource | null>(null);
 
   useEffect(() => {
     setCfg(getConfig());
+    setLangState(getLang());
   }, []);
 
-  // Detect the HTTPS-page -> HTTP-api mixed-content situation up front.
+  const switchLang = (l: Lang) => {
+    setLang(l);
+    setLangState(l);
+  };
+
   useEffect(() => {
     if (!cfg) return;
     if (typeof window !== "undefined" && window.location.protocol === "https:" && cfg.analysis.startsWith("http:")) {
@@ -44,15 +54,14 @@ export default function Page() {
   const refresh = useCallback(async () => {
     if (!cfg) return;
     try {
-      const s = await api.stats(cfg);
-      setStats(s);
+      setStats(await api.stats(cfg));
       setConnected(true);
     } catch {
       setConnected(false);
     }
     try {
-      const t = await api.timeline(cfg, 40);
-      setSessions(t.sessions ?? []);
+      const tl = await api.timeline(cfg, 40);
+      setSessions(tl.sessions ?? []);
     } catch {}
   }, [cfg]);
 
@@ -78,7 +87,6 @@ export default function Page() {
     };
   }, [cfg, refresh, refreshHealth]);
 
-  // Live event stream (SSE).
   useEffect(() => {
     if (!cfg) return;
     try {
@@ -86,11 +94,10 @@ export default function Page() {
       esRef.current = es;
       es.onmessage = (e) => {
         try {
-          const ev = JSON.parse(e.data) as BattleEvent;
-          setEvents((prev) => [ev, ...prev].slice(0, 120));
+          setEvents((prev) => [JSON.parse(e.data) as BattleEvent, ...prev].slice(0, 120));
         } catch {}
       };
-      es.onerror = () => {}; // browser auto-reconnects; polling covers the data
+      es.onerror = () => {};
       return () => es.close();
     } catch {
       return;
@@ -103,66 +110,74 @@ export default function Page() {
         <div className="top-inner">
           <h1 className="brand">
             ⚔️ ADM Battle Console
-            <span className="sub">Red attacks · Blue defends · Green remediates</span>
+            <span className="sub">{t.subtitle}</span>
           </h1>
+          <div className="langtoggle">
+            <button className={lang === "en" ? "on" : ""} onClick={() => switchLang("en")}>EN</button>
+            <button className={lang === "zh-Hant" ? "on" : ""} onClick={() => switchLang("zh-Hant")}>繁中</button>
+          </div>
           <div className="conn">
-            <span
-              className={`dot ${connected === true ? "live" : connected === false ? "down" : ""}`}
-            />
-            {connected === true ? "live" : connected === false ? "unreachable" : "connecting…"}
+            <span className={`dot ${connected === true ? "live" : connected === false ? "down" : ""}`} />
+            {connected === true ? t.live : connected === false ? t.unreachable : t.connecting}
           </div>
         </div>
       </header>
 
       <div className="wrap">
-        {mixedContent && (
-          <div className="banner">
-            <strong>Live data blocked by the browser (mixed content).</strong> This page is served
-            over HTTPS but the API is <code>{cfg?.analysis}</code> (HTTP). Put the API behind HTTPS
-            (a domain + TLS, or a Cloudflare Tunnel) and point this dashboard at it with{" "}
-            <code>?api=https://your-host</code>, or open the API host directly.
-          </div>
-        )}
+        {mixedContent && <div className="banner">{t.mixedContent}</div>}
 
-        <h2 className="section">System status</h2>
+        <div className="about">
+          <button className="about-h" onClick={() => setAboutOpen((v) => !v)}>
+            <span>ℹ️ {t.aboutTitle}</span>
+            <span className="chev">{aboutOpen ? "▾" : "▸"}</span>
+          </button>
+          {aboutOpen && (
+            <div className="about-body">
+              {t.aboutBody.map((p, i) => (
+                <p key={i}>{p}</p>
+              ))}
+              <ul>
+                <li><span className="tag red">RED</span> {t.aboutRed}</li>
+                <li><span className="tag blue">BLUE</span> {t.aboutBlue}</li>
+                <li><span className="tag green">GREEN</span> {t.aboutGreen}</li>
+              </ul>
+              <p className="muted">{t.aboutHowto}</p>
+            </div>
+          )}
+        </div>
+
+        <h2 className="section">{t.systemStatus}</h2>
         <div className="status-grid">
-          <StatusCard label="Analysis engine" ok={health.analysis} okText="ok" />
-          <StatusCard label="Neon Postgres" ok={health.neon} okText="ready" />
-          <StatusCard label="Gateway (target)" ok={health.gateway} okText="up" />
+          <StatusCard label={t.analysisEngine} ok={health.analysis} okText={t.ok} downText={t.down} checkingText={t.checking} />
+          <StatusCard label={t.neonPostgres} ok={health.neon} okText={t.ready} downText={t.down} checkingText={t.checking} />
+          <StatusCard label={t.gatewayTarget} ok={health.gateway} okText={t.up} downText={t.down} checkingText={t.checking} />
           <StatusCard
-            label="Elasticsearch (Bonsai)"
+            label={t.elasticsearch}
             ok={stats ? stats.elastic_enabled : null}
-            okText="indexing"
-            offText="postgres-only"
+            okText={t.indexing}
+            downText={t.postgresOnly}
+            checkingText={t.checking}
             neutralOff
           />
         </div>
 
-        <h2 className="section">Battle scoreboard</h2>
+        <h2 className="section">{t.scoreboard}</h2>
         <div className="tiles">
-          <Tile k="Attacks" v={stats ? String(stats.attacks) : "–"} cls="red" />
-          <Tile k="Block rate" v={stats ? pct(stats.block_rate) : "–"} cls="blue" />
-          <Tile k="Detection rate" v={stats ? pct(stats.detection_rate) : "–"} cls="blue" />
-          <Tile k="Landed" v={stats ? String(stats.landed) : "–"} cls="red" />
-          <Tile k="Remediations" v={stats ? String(stats.remediations) : "–"} cls="good" />
-          <Tile
-            k="MTTR"
-            v={stats ? (stats.mttr_seconds == null ? "–" : `${stats.mttr_seconds.toFixed(1)}s`) : "–"}
-            cls="good"
-          />
-          <Tile k="Residual risk" v={stats ? String(stats.residual_risk) : "–"} cls="warn" />
+          <Tile k={t.attacks} v={stats ? String(stats.attacks) : "–"} cls="red" />
+          <Tile k={t.blockRate} v={stats ? pct(stats.block_rate) : "–"} cls="blue" />
+          <Tile k={t.detectionRate} v={stats ? pct(stats.detection_rate) : "–"} cls="blue" />
+          <Tile k={t.landed} v={stats ? String(stats.landed) : "–"} cls="red" />
+          <Tile k={t.remediations} v={stats ? String(stats.remediations) : "–"} cls="good" />
+          <Tile k={t.mttr} v={stats ? (stats.mttr_seconds == null ? "–" : `${stats.mttr_seconds.toFixed(1)}s`) : "–"} cls="good" />
+          <Tile k={t.residualRisk} v={stats ? String(stats.residual_risk) : "–"} cls="warn" />
         </div>
 
         <div className="grid2" style={{ marginTop: 20 }}>
           <div>
-            <h2 className="section">Live battle feed</h2>
+            <h2 className="section">{t.liveFeed}</h2>
             <div className="panel tall">
               {events.length === 0 && (
-                <div className="feed-row muted">
-                  {connected === false
-                    ? "No connection to the event stream."
-                    : "Waiting for events…"}
-                </div>
+                <div className="feed-row muted">{connected === false ? t.noStream : t.waitingEvents}</div>
               )}
               {events.map((ev, i) => (
                 <EventRow key={ev.id ?? i} ev={ev} />
@@ -170,33 +185,27 @@ export default function Page() {
             </div>
           </div>
           <div>
-            <h2 className="section">By technique — blocked ▏landed</h2>
+            <h2 className="section">{t.byTechnique}</h2>
             <div className="panel tall">
               <div className="legend">
-                <span>
-                  <span className="sw" style={{ background: "var(--blue)" }} />
-                  blocked (blue)
-                </span>
-                <span>
-                  <span className="sw" style={{ background: "var(--red)" }} />
-                  landed (red)
-                </span>
+                <span><span className="sw" style={{ background: "var(--blue)" }} />{t.blockedLegend}</span>
+                <span><span className="sw" style={{ background: "var(--red)" }} />{t.landedLegend}</span>
               </div>
-              {(stats?.by_technique ?? []).map((t) => (
-                <TechRow key={t.technique} name={t.technique} blocked={t.blocked} landed={t.landed} />
+              {(stats?.by_technique ?? []).map((tech) => (
+                <TechRow key={tech.technique} name={tech.technique} blocked={tech.blocked} landed={tech.landed} />
               ))}
-              {!stats && <div className="feed-row muted">Loading…</div>}
+              {!stats && <div className="feed-row muted">{t.loading}</div>}
             </div>
           </div>
         </div>
 
-        <h2 className="section">Recent sessions (attack → remediation)</h2>
+        <h2 className="section">{t.recentSessions}</h2>
         <div className="panel">
           <div className="feed-row muted" style={{ fontWeight: 600 }}>
-            <span style={{ width: 90 }}>technique</span>
-            <span style={{ width: 90 }}>target</span>
-            <span>attack</span>
-            <span className="out">remediation / MTTR</span>
+            <span style={{ width: 90 }}>{t.colTechnique}</span>
+            <span style={{ width: 90 }}>{t.colTarget}</span>
+            <span>{t.colAttack}</span>
+            <span className="out">{t.colRemediation}</span>
           </div>
           {sessions.slice(0, 20).map((s) => (
             <div className="feed-row" key={s.session_id}>
@@ -210,16 +219,12 @@ export default function Page() {
               </span>
             </div>
           ))}
-          {sessions.length === 0 && <div className="feed-row muted">No sessions yet.</div>}
+          {sessions.length === 0 && <div className="feed-row muted">{t.noSessions}</div>}
         </div>
 
-        <Settings cfg={cfg} />
+        <Settings cfg={cfg} t={t} />
 
-        <div className="foot-note">
-          Polls <code>/api/stats</code> + <code>/api/timeline</code> every few seconds and streams{" "}
-          <code>/api/stream</code> (SSE). Durable log in Neon Postgres; search/aggregation in
-          Elasticsearch when enabled.
-        </div>
+        <div className="foot-note">{t.footNote}</div>
       </div>
     </>
   );
@@ -229,18 +234,20 @@ function StatusCard({
   label,
   ok,
   okText,
-  offText = "down",
+  downText,
+  checkingText,
   neutralOff = false,
 }: {
   label: string;
   ok: boolean | null;
   okText: string;
-  offText?: string;
+  downText: string;
+  checkingText: string;
   neutralOff?: boolean;
 }) {
   const cls = ok === true ? "good" : ok === false ? (neutralOff ? "warn" : "crit") : "warn";
   const icon = ok === true ? "✓" : ok === false ? (neutralOff ? "○" : "✕") : "…";
-  const val = ok === true ? okText : ok === false ? offText : "checking…";
+  const val = ok === true ? okText : ok === false ? downText : checkingText;
   return (
     <div className="status-card">
       <div className={`pill ${cls}`}>{icon}</div>
@@ -290,7 +297,7 @@ function EventRow({ ev }: { ev: BattleEvent }) {
   );
 }
 
-function Settings({ cfg }: { cfg: ApiConfig | null }) {
+function Settings({ cfg, t }: { cfg: ApiConfig | null; t: Dict }) {
   const [analysis, setAnalysis] = useState("");
   const [gateway, setGateway] = useState("");
   useEffect(() => {
@@ -301,19 +308,19 @@ function Settings({ cfg }: { cfg: ApiConfig | null }) {
   }, [cfg]);
   return (
     <>
-      <h2 className="section">Endpoint</h2>
+      <h2 className="section">{t.endpoint}</h2>
       <div className="settings">
-        <input value={analysis} onChange={(e) => setAnalysis(e.target.value)} placeholder="analysis API base URL" />
-        <input value={gateway} onChange={(e) => setGateway(e.target.value)} placeholder="gateway base URL" />
+        <input value={analysis} onChange={(e) => setAnalysis(e.target.value)} placeholder={t.analysisUrl} />
+        <input value={gateway} onChange={(e) => setGateway(e.target.value)} placeholder={t.gatewayUrl} />
         <button
           onClick={() => {
             setConfig(analysis.trim(), gateway.trim());
             window.location.search = "";
           }}
         >
-          Save & reload
+          {t.save}
         </button>
-        <span className="muted">or use <code>?api=…&amp;gw=…</code> in the URL</span>
+        <span className="muted">{t.orUse}</span>
       </div>
     </>
   );
