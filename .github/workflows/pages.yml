@@ -36,23 +36,22 @@ jobs:
           cache: npm
           cache-dependency-path: dashboard/package-lock.json
 
-      - name: Resolve base path
-        id: base
-        run: echo "path=/${GITHUB_REPOSITORY#*/}" >> "$GITHUB_OUTPUT"
+      # Run first so its base_path output (the real Pages sub-path, which may
+      # differ from the raw repo name) can be baked into the static build.
+      - uses: actions/configure-pages@v5
+        id: pages
+        with:
+          enablement: true
 
       - run: npm ci
 
       - name: Build static export
         env:
-          PAGES_BASE_PATH: ${{ steps.base.outputs.path }}
+          PAGES_BASE_PATH: ${{ steps.pages.outputs.base_path }}
         run: npm run build
 
       - name: Add .nojekyll (serve _next assets)
         run: touch out/.nojekyll
-
-      - uses: actions/configure-pages@v5
-        with:
-          enablement: true
 
       - uses: actions/upload-pages-artifact@v3
         with:
