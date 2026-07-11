@@ -17,6 +17,7 @@ import { translations, getLang, setLang, type Lang, type Dict } from "@/lib/i18n
 const pct = (x: number) => `${(x * 100).toFixed(0)}%`;
 const CATEGORY_ORDER = ["Edge", "Detection", "Agents", "Runtime", "Data", "Ops"];
 const GITHUB_URL = "https://github.com/Jest-Test-Team/Agentic-Defense-Matrix-ADM";
+const TIMELINE_LIMIT = 1000;
 const RED_TEAM_ATTACKS = [
   { id: "RT-001", attack: "Prompt Injection", technique: "Indirect injection via RAG context" },
   { id: "RT-002", attack: "Tool Chaining", technique: "read_secret → external_send chain" },
@@ -100,7 +101,7 @@ export default function Page() {
       setConnected(false);
     }
     try {
-      const tl = await api.timeline(cfg, 40);
+      const tl = await api.timeline(cfg, TIMELINE_LIMIT);
       setSessions(tl.sessions ?? []);
     } catch {}
   }, [cfg]);
@@ -273,9 +274,7 @@ export default function Page() {
               <span className="muted" style={{ width: 90 }}>{s.target || "—"}</span>
               <span className={`out ${s.attack_outcome}`}>{s.attack_outcome}</span>
               <span className="out">
-                {s.remediation_outcome
-                  ? `${s.remediation_outcome}${s.mttr_seconds != null ? ` · ${s.mttr_seconds.toFixed(1)}s` : ""}`
-                  : "—"}
+                <RemediationCell session={s} t={t} />
               </span>
             </div>
           ))}
@@ -326,9 +325,7 @@ function DetailModal({ modal, t, onClose }: { modal: NonNullable<Modal>; t: Dict
                   <span className="muted" style={{ width: 90 }}>{s.target || "—"}</span>
                   <span className={`out ${s.attack_outcome}`}>{s.attack_outcome}</span>
                   <span className="out">
-                    {s.remediation_outcome
-                      ? `${s.remediation_outcome}${s.mttr_seconds != null ? ` · ${s.mttr_seconds.toFixed(1)}s` : ""}`
-                      : "—"}
+                    <RemediationCell session={s} t={t} />
                   </span>
                 </div>
               ))}
@@ -425,6 +422,18 @@ function EventRow({ ev }: { ev: BattleEvent }) {
       <span className={`out ${ev.outcome || ""}`}>{ev.outcome || ""}</span>
     </div>
   );
+}
+
+function RemediationCell({ session, t }: { session: SessionRow; t: Dict }) {
+  if (session.remediation_outcome) {
+    return (
+      <>
+        {session.remediation_outcome}
+        {session.mttr_seconds != null ? ` · ${session.mttr_seconds.toFixed(1)}s` : ""}
+      </>
+    );
+  }
+  return <span className="muted">{session.attack_outcome === "blocked" ? t.notNeeded : t.pending}</span>;
 }
 
 function AttackMatrix({ t }: { t: Dict }) {
