@@ -45,8 +45,13 @@ header.top {
 .langtoggle button { background: transparent; color: var(--ink-3); border: none; padding: 5px 11px; font-size: 12px; cursor: pointer; }
 .langtoggle button.on { background: var(--blue); color: #fff; }
 .conn { margin-left: 16px; display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--ink-2); }
-.navlink { margin-left: 16px; font-size: 12.5px; color: var(--blue); text-decoration: none; white-space: nowrap; }
-.navlink:hover { text-decoration: underline; }
+.navlink {
+  margin-left: 16px; font-size: 12.5px; font-weight: 600; white-space: nowrap;
+  color: #fff; background: var(--blue); text-decoration: none;
+  padding: 7px 14px; border-radius: 8px; border: 1px solid var(--blue);
+  transition: filter .12s;
+}
+.navlink:hover { filter: brightness(1.1); text-decoration: none; }
 
 /* search page */
 .searchbar { display: flex; gap: 8px; margin-top: 18px; }
