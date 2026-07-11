@@ -82,8 +82,12 @@ jobs:
           # pull the fallback-aware images (LLM failover + /api/llm) then recreate
           docker compose -f docker-compose.yml -f deploy/docker-compose.battle.yml \
             pull gateway planner summarizer analysis || true
+          # Stop+remove first (fixed container_name + --force-recreate can fail
+          # with "container is running" on some docker versions), then recreate.
           docker compose -f docker-compose.yml -f deploy/docker-compose.battle.yml \
-            up -d --no-build --force-recreate gateway planner summarizer analysis
+            rm -sf gateway planner summarizer analysis || true
+          docker compose -f docker-compose.yml -f deploy/docker-compose.battle.yml \
+            up -d --no-build gateway planner summarizer analysis
           echo "recreated. containers:"; docker ps --format '{{.Names}}\t{{.Status}}'
           echo "== compose analysis FALLBACK lines =="
           grep -n "FALLBACK" deploy/docker-compose.battle.yml || echo "(none in compose!)"
