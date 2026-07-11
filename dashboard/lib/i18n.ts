@@ -77,6 +77,21 @@ export interface Dict {
   matrixId: string;
   matrixAttack: string;
   matrixTechnique: string;
+  matrixNote: string;
+  matrixViewAll: string;
+  matrixFullTitle: string;
+  matrixIntro: string;
+  matrixSearchPlaceholder: string;
+  matrixColMutation: string;
+  matrixColLang: string;
+  matrixColSeverity: string;
+  matrixColTarget: string;
+  matrixColPreview: string;
+  matrixAllFamilies: string;
+  matrixShowing: (a: number, b: number, total: number) => string;
+  matrixPrev: string;
+  matrixNext: string;
+  matrixLoading: string;
 
   searchNav: string;
   searchTitle: string;
@@ -176,6 +191,21 @@ export const translations: Record<Lang, Dict> = {
     matrixId: "ID",
     matrixAttack: "Attack",
     matrixTechnique: "Technique",
+    matrixNote: "These 30 rows are the base attack classes. At runtime the red team deterministically expands them into 10,000 enumerated campaign variants (RT-00001 … RT-10000) by mutating each seed (base64, hex, zero-width, case-flip, concat-split, …) and paraphrasing across languages.",
+    matrixViewAll: "Browse all 10,000 variants",
+    matrixFullTitle: "Attack matrix — all 10,000 variants",
+    matrixIntro: "Every enumerated variant the red team fires, generated deterministically (seed 1337). Each derives from one of the 30 base techniques via a mutation + language paraphrase. Search by id, technique, name, tag, mutation, or payload text.",
+    matrixSearchPlaceholder: "search id / technique / name / tag / mutation / payload…",
+    matrixColMutation: "Mutation",
+    matrixColLang: "Lang",
+    matrixColSeverity: "Sev",
+    matrixColTarget: "Target",
+    matrixColPreview: "Payload preview",
+    matrixAllFamilies: "All base techniques",
+    matrixShowing: (a, b, total) => `Showing ${a.toLocaleString()}–${b.toLocaleString()} of ${total.toLocaleString()}`,
+    matrixPrev: "‹ Prev",
+    matrixNext: "Next ›",
+    matrixLoading: "Loading corpus…",
 
     searchNav: "🔎 Search events",
     searchTitle: "Event search (Elasticsearch)",
@@ -278,6 +308,21 @@ export const translations: Record<Lang, Dict> = {
     matrixId: "ID",
     matrixAttack: "攻擊",
     matrixTechnique: "技術",
+    matrixNote: "這 30 列是「基礎攻擊類別」。實際運行時，紅隊會以決定性方式，把每個基礎手法透過變異（base64、hex、零寬字元、大小寫翻轉、字串切割…）與跨語言改寫，展開成 10,000 個列舉出的攻擊變體（RT-00001 … RT-10000）。",
+    matrixViewAll: "瀏覽全部 10,000 個變體",
+    matrixFullTitle: "攻擊矩陣 — 全部 10,000 個變體",
+    matrixIntro: "紅隊實際發動的每一個列舉變體，以決定性方式產生（種子 1337）。每個變體都源自 30 個基礎手法之一，經過一次變異與語言改寫。可用 id、技術、名稱、標籤、變異方式或攻擊內容搜尋。",
+    matrixSearchPlaceholder: "搜尋 id／技術／名稱／標籤／變異／攻擊內容…",
+    matrixColMutation: "變異方式",
+    matrixColLang: "語言",
+    matrixColSeverity: "嚴重度",
+    matrixColTarget: "目標",
+    matrixColPreview: "攻擊內容預覽",
+    matrixAllFamilies: "所有基礎手法",
+    matrixShowing: (a, b, total) => `顯示第 ${a.toLocaleString()}–${b.toLocaleString()} 筆，共 ${total.toLocaleString()} 筆`,
+    matrixPrev: "‹ 上一頁",
+    matrixNext: "下一頁 ›",
+    matrixLoading: "載入攻擊語料中…",
 
     searchNav: "🔎 搜尋事件",
     searchTitle: "事件搜尋（Elasticsearch）",
