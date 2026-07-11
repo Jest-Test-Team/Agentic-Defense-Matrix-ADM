@@ -316,6 +316,64 @@ pub async fn timeline(
     }
 }
 
+/// GET /api/latency : δ (detection delay) and κ (containment latency)
+/// distributions from the stored battle events. Reports p50/p95/p99 — not just a
+/// mean/MTTR — because the tail is what bounds the blast radius B(∞) ∝ (δ+κ).
+///
+///   δ ≈ latency_ms of caught attack events (detection compute at the boundary)
+///   κ ≈ latency_ms of remediation events (session revoke + container kill)
+pub async fn latency(State(st): State<Arc<AppState>>) -> impl IntoResponse {
+    let delta = latency_dist(
+        &st,
+        "kind='attack' AND outcome IN ('blocked','detected')",
+    )
+    .await;
+    let kappa = latency_dist(
+        &st,
+        "kind='remediation' AND outcome IN ('revoked','killed','restarted')",
+    )
+    .await;
+
+    match (delta, kappa) {
+        (Ok(d), Ok(k)) => (
+            StatusCode::OK,
+            Json(json!({
+                "unit": "ms",
+                "delta_detection": d,
+                "kappa_containment": k,
+                "note": "B(∞) ∝ (δ+κ); percentiles over stored latency_ms."
+            })),
+        ),
+        (Err(e), _) | (_, Err(e)) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": e.to_string() })),
+        ),
+    }
+}
+
+/// Percentile summary of latency_ms over the battle_events rows matching `pred`.
+async fn latency_dist(st: &Arc<AppState>, pred: &str) -> Result<serde_json::Value, sqlx::Error> {
+    let sql = format!(
+        "SELECT \
+           COUNT(*) AS n, \
+           COALESCE(MIN(latency_ms),0) AS min, \
+           COALESCE(percentile_cont(0.50) WITHIN GROUP (ORDER BY latency_ms),0) AS p50, \
+           COALESCE(percentile_cont(0.95) WITHIN GROUP (ORDER BY latency_ms),0) AS p95, \
+           COALESCE(percentile_cont(0.99) WITHIN GROUP (ORDER BY latency_ms),0) AS p99, \
+           COALESCE(MAX(latency_ms),0) AS max, \
+           COALESCE(AVG(latency_ms),0) AS mean \
+         FROM battle_events WHERE {pred}"
+    );
+    let row = sqlx::query_as::<_, (i64, i64, f64, f64, f64, i64, f64)>(&sql)
+        .fetch_one(&st.pool)
+        .await?;
+    let (n, min, p50, p95, p99, max, mean) = row;
+    Ok(json!({
+        "count": n, "min_ms": min, "p50_ms": p50, "p95_ms": p95,
+        "p99_ms": p99, "max_ms": max, "mean_ms": mean
+    }))
+}
+
 /// Scoreboard computed entirely from Postgres (Elastic not required).
 pub async fn stats(State(st): State<Arc<AppState>>) -> impl IntoResponse {
     let agg = sqlx::query_as::<_, (i64, i64, i64, i64, i64)>(

@@ -1,0 +1,60 @@
+{
+  "delta_detection": {
+    "per_observation": {
+      "name": "delta_per_observation",
+      "count": 15000,
+      "min_ms": 0.007583,
+      "p50_ms": 0.008166,
+      "p95_ms": 0.016708,
+      "p99_ms": 0.026959,
+      "max_ms": 0.40325,
+      "mean_ms": 0.010493042733333334
+    },
+    "time_to_fire": {
+      "name": "delta_time_to_flag",
+      "count": 3000,
+      "min_ms": 0.032708,
+      "p50_ms": 0.033208,
+      "p95_ms": 0.034834,
+      "p99_ms": 0.055292,
+      "max_ms": 0.162125,
+      "mean_ms": 0.03403768533333333
+    },
+    "fired_fraction": 1,
+    "throughput_obs_per_sec": 95301.24153819482
+  },
+  "kappa_containment": {
+    "policy_revoke": {
+      "name": "kappa_policy_revoke",
+      "count": 500,
+      "min_ms": 0,
+      "p50_ms": 0.000084,
+      "p95_ms": 0.000209,
+      "p99_ms": 0.000292,
+      "max_ms": 0.000416,
+      "mean_ms": 0.000108182
+    },
+    "process_kill": {
+      "name": "kappa_process_kill",
+      "count": 500,
+      "min_ms": 0.161625,
+      "p50_ms": 0.610291,
+      "p95_ms": 1.319709,
+      "p99_ms": 1.93725,
+      "max_ms": 10.249458,
+      "mean_ms": 0.698123422
+    },
+    "total": {
+      "name": "kappa_total",
+      "count": 500,
+      "min_ms": 0.161708,
+      "p50_ms": 0.610375,
+      "p95_ms": 1.319876,
+      "p99_ms": 1.937458,
+      "max_ms": 10.2495,
+      "mean_ms": 0.698231604
+    },
+    "kill_measured": true
+  },
+  "blast_radius_note": "B(∞) ≤ w_node·(|R(t₀)|+λ(δ+κ)) + w_ent·Ḣ·(δ+κ) — residual damage is linear in the (δ+κ) tail."
+}

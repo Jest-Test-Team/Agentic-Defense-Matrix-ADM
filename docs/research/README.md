@@ -42,6 +42,12 @@ MITRE ATLAS alignment, ablations, reproducibility) and
   on obfuscating mutations (base64/zero-width/homoglyph: **+64 to +100 pts**). The
   pluggable-φ detector lives in `pkg/semantic/{featurizer,drift}.go`; claims are
   CI-protected in `pkg/semantic/drift_test.go`.
+- [latency-results.md](latency-results.md) — the **δ/κ instrumentation** for C2:
+  `go run ./cmd/latency` times the real code paths — detection delay δ (p50 ≈ 33 µs,
+  94k tokens/s) and containment latency κ (p50 ≈ 0.5 ms, p99 ≈ 1.8 ms: sub-µs policy
+  flip + OS process kill). Reports distributions, not MTTR. Reusable recorder in
+  `pkg/telemetry/latency.go`; live tail latencies via `GET /api/latency` on the
+  analysis engine.
 
 ## Thesis statement (the one sentence a reviewer must remember)
 
