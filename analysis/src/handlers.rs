@@ -363,7 +363,7 @@ async fn latency_dist(st: &Arc<AppState>, pred: &str) -> Result<serde_json::Valu
            COUNT(*) AS n, \
            COALESCE(MIN(latency_ms),0) AS min, \
            COALESCE(MAX(latency_ms),0) AS max, \
-           COALESCE(AVG(latency_ms),0) AS mean, \
+           COALESCE(AVG(latency_ms),0)::double precision AS mean, \
            COALESCE(percentile_cont($1) WITHIN GROUP (ORDER BY latency_ms), ARRAY[]::double precision[]) AS qs \
          FROM battle_events WHERE {pred}"
     );
