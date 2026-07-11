@@ -14,18 +14,40 @@ A full red vs. blue vs. green exercise runs continuously on free-tier cloud:
 - **Demo video https://youtu.be/K9QCi-esu_g
 
 - **Dashboard (realtime):** https://jest-test-team.github.io/Agentic-Defense-Matrix-ADM/
-  — service health, battle scoreboard, per-technique breakdown, live event feed
-  (English / 繁體中文).
-- **API (HTTPS):** `https://api.dennisleehappy.org` — `/api/stats`, `/api/timeline`,
-  `/api/stream` (SSE), `/health`, `/ready`.
+  — every tech-stack component's health, LLM-provider status (Groq → X.AI failover),
+  battle scoreboard with click-through session detail, per-technique breakdown, live
+  event feed (English / 繁體中文). Subpages: **🔎 Search** (full-text Elasticsearch
+  over every event) and **🎯 Matrix** (all 10,000 enumerated attack variants).
+- **API (HTTPS):** `https://api.dennisleehappy.org` —
+  `/api/stats`, `/api/timeline`, `/api/stream` (SSE), `/api/system` (per-component
+  health), `/api/llm` (provider status), `/api/latency` (δ/κ distributions),
+  `/api/search`, `/health`, `/ready`.
 
 The red team fires thousands of adversarial prompts and tool-call attempts at the
 gateway; the blue team blocks them at the boundary; the green team remediates any
 that land. Every event is logged to Postgres and scored live. See
 **[Live Deployment — Infrastructure & Services](docs/architecture/live-deployment.md)**
-for the full architecture (OCI micro + Neon + Bonsai + Groq + Caddy + GitHub Pages),
+for the full architecture (OCI micro + Neon + Bonsai + Groq→X.AI + Caddy + GitHub Pages),
 and **[Battle Orchestration](docs/battle-orchestration.md)** for how the exercise
 works.
+
+### 🎓 From artifact to research
+
+ADM is also framed as a **security-research program** (AISec/NDSS/USENIX/S&P-workshop
+grade): the shift from *how it works* to *why it holds and where the limits are*. Two
+contributions — **intent-drift detection** (C1) and **asymmetric containment** (C2) —
+are formalized and backed by **runnable experiments** with real numbers:
+
+| experiment | command | headline |
+|---|---|---|
+| embedding-φ ablation | `go run ./cmd/ablation` | embedding 51.5% vs keyword 13.8% detect; +100 pts on obfuscation |
+| window-W sweep (theory vs measured) | `go run ./cmd/sweep` | FPR 38%→0% & detection 76%→100%, inside Eq. 2/3 bounds |
+| δ/κ instrumentation | `go run ./cmd/latency` | detection p50 33 µs; containment primitive p50 0.5 ms |
+| overhead / Pareto (≤5%) | `go run ./cmd/overhead` | lock-free 2× cheaper than mutex; <5% CPU to ~160k ev/s |
+| SOTA baseline (Llama Guard) | `go run ./cmd/baseline` | asymmetry α ≈ 10³–10⁴× |
+
+See **[docs/research/](docs/research/)** for the formalization, evaluation plan,
+reviewer rebuttals, and results docs.
 
 ---
 
@@ -158,17 +180,24 @@ agentic-defense-matrix/
 │   ├── gateway/                   # API Gateway + semantic middleware
 │   ├── siem_engine/               # SIEM correlation engine
 │   ├── control_plane/             # Auto-update server
-│   └── agent/
-│       ├── planner/               # Task decomposition agent
-│       ├── executor/              # Tool execution agent
-│       └── summarizer/            # Response summarization agent
+│   ├── redteam_agent/             # Red team: fires the 10,000-variant corpus
+│   ├── greenteam_agent/           # Green team: session revoke + container containment
+│   ├── agent/{planner,executor,summarizer}/   # gRPC agent services
+│   ├── corpus_dump/               # Renders the corpus → dashboard/public/corpus.json
+│   ├── ablation/                  # C1: embedding-φ vs keyword ablation
+│   ├── sweep/                     # C1: window-W sweep vs Eq. 2/3 bounds
+│   ├── latency/                   # C2: δ/κ instrumentation (detection & containment)
+│   ├── overhead/                  # C2: lock-free vs mutex overhead / Pareto rig
+│   └── baseline/                  # SOTA: ADM drift vs Llama Guard + asymmetry α
 ├── pkg/
 │   ├── auth/                      # OPA + SPIRE client, JWT management
-│   ├── semantic/                  # Prompt vectorization + intent comparison
-│   ├── telemetry/                 # OTel instrumentation helpers
-│   ├── ollama/                    # Ollama HTTP API wrapper
+│   ├── semantic/                  # Intent-drift detection: analyzer + pluggable φ (featurizer, drift)
+│   ├── telemetry/                 # OTel helpers + LatencyRecorder (percentile δ/κ)
+│   ├── ollama/                    # OpenAI-compatible LLM client (Groq → X.AI failover)
+│   ├── redteam/                   # Deterministic 10,000-variant attack corpus (MITRE-ATLAS tagged)
+│   ├── battle/                    # Battle event schema + emitter
 │   ├── policy/                    # OPA Rego evaluation client
-│   ├── ringbuffer/                # Lock-free SPSC ring buffer
+│   ├── ringbuffer/                # Lock-free ring buffer (SIEM hot path)
 │   └── proto/                     # Protobuf service definitions
 ├── agents/
 │   └── schemas/                   # OpenAI-compatible tool definitions
@@ -436,9 +465,10 @@ sudo systemctl start adm
 - [Data Flow](docs/architecture/data-flow.md) — Event pipelines
 - [Security Architecture](docs/architecture/security.md) — Zero trust model
 - [Threat Model](docs/threat-model.md) — MITRE ATLAS mapping
-- [Battle Orchestration](docs/battle-orchestration.md) — Red vs Blue vs Green exercise + analysis engine (db/be/fe)
+- [Battle Orchestration](docs/battle-orchestration.md) — Red vs Blue vs Green exercise + analysis engine (db/be/fe); LLM failover + observability flags
 - [OCI Deployment Usage](docs/instruction.md) — connecting to and operating the deployed stack
-- [ADRs](docs/adr/) — Architecture decision records
+- [**Research program**](docs/research/) — ADM as a security paper: formalization (intent drift, blast-radius containment), evaluation plan, reviewer rebuttals, and runnable-experiment results (ablation / sweep / latency / overhead / baseline)
+- [ADRs](docs/adr/) — Architecture decision records (incl. 006 hosted-LLM failover, 007 intent-drift research)
 
 ---
 

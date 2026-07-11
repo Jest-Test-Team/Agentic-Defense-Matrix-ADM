@@ -4,6 +4,14 @@
 
 This document maps Agentic AI threats from MITRE ATLAS and OWASP LLM Top 10 to ADM's defensive layers.
 
+Each threat class below is **operationalized** as a base technique in the red-team
+corpus (`pkg/redteam/corpus.go`, tagged with its ATLAS/OWASP id), which the generator
+expands into **10,000 enumerated, deterministic variants** (`RT-00001…RT-10000`) via
+mutations (base64, hex, zero-width, homoglyph, paraphrase, …) and runs continuously
+against the live gateway. Browse them all on the dashboard's **Matrix** page. The
+[research program](research/) evaluates ADM's detection against these classes at a
+matched false-positive rate — see [ablation-results](research/ablation-results.md).
+
 ## Threat Matrix
 
 ### 1. Indirect Prompt Injection (AML.T0051 / OWASP LLM01)

@@ -1,5 +1,11 @@
 # ADM System Architecture
 
+> **See also:** the free-tier cloud topology in
+> [live-deployment.md](live-deployment.md) (OCI micro + Neon + Bonsai + Groq→X.AI +
+> Caddy + GitHub Pages), the LLM-failover decision in [ADR-006](../adr/006-hosted-llm-failover.md),
+> and the intent-drift detection model in [ADR-007](../adr/007-intent-drift-research.md).
+> The deployed analysis engine exposes `/api/{stats,timeline,system,llm,latency,search,stream}`.
+
 ## High-Level Overview
 
 ```mermaid

@@ -152,6 +152,23 @@ curl -X POST http://155.248.184.176:8080/v1/admin/update/check
 > ingress rules to your own IP (edit `deploy/terraform/main.tf`,
 > `adm_nsg_ingress`) once you're past experimentation.
 
+### Analysis API (port 8090, or `https://<domain>` behind Caddy)
+
+The Rust analysis engine powers the dashboard and exposes the live telemetry:
+
+```bash
+curl https://api.dennisleehappy.org/api/stats        # scoreboard (block/detection/landing, MTTR, residual risk)
+curl https://api.dennisleehappy.org/api/timeline      # recent attack→remediation sessions
+curl https://api.dennisleehappy.org/api/system        # every stack component's health + hints
+curl https://api.dennisleehappy.org/api/llm           # LLM providers: Groq (primary) / X.AI (fallback), which is active
+curl https://api.dennisleehappy.org/api/latency       # δ (detection) & κ (containment) distributions + CDF
+curl "https://api.dennisleehappy.org/api/search?q=team:red+AND+outcome:allowed"   # full-text over events (Elastic)
+curl https://api.dennisleehappy.org/api/stream        # live SSE event feed
+```
+
+`/api/latency` is the deployed δ/κ instrument (see [research](research/latency-results.md)):
+`delta_detection` and `kappa_containment`, each with `p50/p95/p99` and a `cdf` array.
+
 ## 5. Using Ollama directly (port 11434)
 
 ```bash
@@ -281,4 +298,22 @@ else means running it from a host that can reach the target gateway:
 
 > **Authorization:** only run the red team agent against ADM deployments you
 > own or are explicitly authorized to test. It sends real attack payloads.
+
+## 10. Research experiments (offline, from the repo root)
+
+The [research program](research/) ships runnable experiments that produce the
+paper's numbers from the deterministic corpus — no cloud needed:
+
+```bash
+go run ./cmd/ablation      # C1: embedding-φ vs keyword detection by mutation class
+go run ./cmd/sweep         # C1: window-W sweep vs the Eq. 2/3 exponential bounds
+go run ./cmd/latency       # C2: δ (detection) & κ (containment primitive) timing
+go run ./cmd/overhead      # C2: lock-free vs mutex SIEM hot path, the ≤5% claim
+go run ./cmd/baseline      # SOTA: ADM drift vs Llama Guard (add ADM_LLM_API_KEY for the α measurement)
+go run ./cmd/corpus_dump   # regenerate the 10,000-variant catalog (dashboard/public/corpus.json)
+```
+
+Add `-json` to any of them for machine-readable output. Results and the rendered
+figures are in [`docs/research/`](research/) (`figures.html` is a published
+interactive artifact). Live δ/κ come from `GET /api/latency` (Section 4).
 
