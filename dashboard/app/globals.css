@@ -180,6 +180,27 @@ h2.section {
 .attack-matrix .matrix-id {
   color: var(--red); font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap;
 }
+.attack-matrix.wide { min-width: 980px; }
+.matrix-prev {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; color: var(--ink-3);
+  max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sevdot { display: inline-block; min-width: 20px; text-align: center; border-radius: 5px; padding: 1px 5px; font-weight: 700; font-size: 11px; }
+.sevdot.s5, .sevdot.s4 { background: rgba(230,103,103,.16); color: var(--crit); }
+.sevdot.s3 { background: rgba(201,133,0,.16); color: var(--yellow); }
+.sevdot.s2, .sevdot.s1 { background: rgba(57,135,229,.16); color: var(--blue); }
+.famselect {
+  background: var(--surface-2); border: 1px solid var(--line); color: var(--ink);
+  border-radius: 9px; padding: 0 12px; font-size: 12.5px; cursor: pointer; min-width: 200px;
+}
+.matrix-toolbar { display: flex; align-items: center; justify-content: space-between; margin: 12px 2px; font-size: 12.5px; }
+.pager { display: inline-flex; gap: 8px; }
+.pager button {
+  background: var(--surface-2); border: 1px solid var(--line); color: var(--ink-2);
+  border-radius: 8px; padding: 6px 12px; font-size: 12px; cursor: pointer;
+}
+.pager button:hover:not(:disabled) { border-color: var(--blue); color: var(--ink); }
+.pager button:disabled { opacity: .4; cursor: default; }
 
 /* clickable cards / tiles */
 .clickable { cursor: pointer; transition: border-color .12s, transform .12s; }
