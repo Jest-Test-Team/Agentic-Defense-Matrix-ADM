@@ -48,8 +48,17 @@ func NewAnalyzer(sensitivity float64) *Analyzer {
 		recentPrompts: make([]PromptRecord, 0),
 	}
 
-	// Default known injection patterns
-	a.knownPatterns = []Pattern{
+	// Default known injection patterns (shared with the lexical featurizer so the
+	// ablation's keyword-φ arm is faithful to this production detector).
+	a.knownPatterns = defaultPatterns()
+
+	return a
+}
+
+// defaultPatterns is the canonical keyword pattern set, shared by the Analyzer
+// and the LexicalFeaturizer.
+func defaultPatterns() []Pattern {
+	return []Pattern{
 		{Name: "system_prompt_override", Keywords: []string{"ignore previous", "ignore all", "disregard instructions", "new instructions"}, Weight: 0.9},
 		{Name: "role_manipulation", Keywords: []string{"you are now", "act as", "pretend to be", "your new role"}, Weight: 0.8},
 		{Name: "data_exfiltration", Keywords: []string{"send to", "post to", "upload to", "exfiltrate", "leak"}, Weight: 0.85},
@@ -59,8 +68,6 @@ func NewAnalyzer(sensitivity float64) *Analyzer {
 		{Name: "prompt_leak", Keywords: []string{"show me your prompt", "what are your instructions", "reveal your system prompt"}, Weight: 0.75},
 		{Name: "delimiter_injection", Keywords: []string{"```system", "```\n\n", "---END---", "<|im_start|>system"}, Weight: 0.85},
 	}
-
-	return a
 }
 
 // Analyze scores a prompt for suspiciousness.

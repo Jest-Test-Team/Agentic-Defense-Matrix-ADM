@@ -35,6 +35,14 @@ Shared across both: [evaluation-plan.md](evaluation-plan.md) (baselines, metrics
 MITRE ATLAS alignment, ablations, reproducibility) and
 [reviewer-rebuttals.md](reviewer-rebuttals.md) (anticipated objections + defenses).
 
+**Runnable experiments (evidence, not just prose):**
+- [ablation-results.md](ablation-results.md) — the **embedding-φ ablation** for C1:
+  `go run ./cmd/ablation`. At matched 2% benign FPR, swapping the keyword scorer for
+  a dense embedding lifts detection 13.8%→51.5%, with the gain concentrated exactly
+  on obfuscating mutations (base64/zero-width/homoglyph: **+64 to +100 pts**). The
+  pluggable-φ detector lives in `pkg/semantic/{featurizer,drift}.go`; claims are
+  CI-protected in `pkg/semantic/drift_test.go`.
+
 ## Thesis statement (the one sentence a reviewer must remember)
 
 > *Defending an autonomous, tool-calling LLM agent is not a classification problem on
