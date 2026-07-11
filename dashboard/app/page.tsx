@@ -74,6 +74,9 @@ export default function Page() {
 
   const landedRows = sessions.filter((s) => s.attack_outcome && s.attack_outcome !== "blocked");
   const remediatedRows = sessions.filter((s) => s.remediation_outcome);
+  const blockedRows = sessions.filter((s) => s.attack_outcome === "blocked");
+  const residualRows = landedRows.filter((s) => !s.remediation_outcome);
+  const openSessions = (title: string, rows: SessionRow[]) => setModal({ kind: "sessions", title, rows });
 
   useEffect(() => {
     setCfg(getConfig());
@@ -221,16 +224,20 @@ export default function Page() {
 
         <h2 className="section">{t.scoreboard}</h2>
         <div className="tiles">
-          <Tile k={t.attacks} v={stats ? String(stats.attacks) : "–"} cls="red" />
-          <Tile k={t.blockRate} v={stats ? pct(stats.block_rate) : "–"} cls="blue" />
-          <Tile k={t.detectionRate} v={stats ? pct(stats.detection_rate) : "–"} cls="blue" />
+          <Tile k={t.attacks} v={stats ? String(stats.attacks) : "–"} cls="red"
+                onClick={() => openSessions(t.allSessions, sessions)} hint={t.clickHint} />
+          <Tile k={t.blockRate} v={stats ? pct(stats.block_rate) : "–"} cls="blue"
+                onClick={() => openSessions(t.blockedSessions, blockedRows)} hint={t.clickHint} />
+          <Tile k={t.detectionRate} v={stats ? pct(stats.detection_rate) : "–"} cls="blue"
+                onClick={() => openSessions(t.detectedSessions, sessions.filter((s) => s.attack_outcome === "detected"))} hint={t.clickHint} />
           <Tile k={t.landed} v={stats ? String(stats.landed) : "–"} cls="red"
-                onClick={() => setModal({ kind: "sessions", title: t.landedSessions, rows: landedRows })} hint={t.clickHint} />
+                onClick={() => openSessions(t.landedSessions, landedRows)} hint={t.clickHint} />
           <Tile k={t.remediations} v={stats ? String(stats.remediations) : "–"} cls="good"
-                onClick={() => setModal({ kind: "sessions", title: t.remediatedSessions, rows: remediatedRows })} hint={t.clickHint} />
-          <Tile k={t.mttr} v={stats ? (stats.mttr_seconds == null ? "–" : `${stats.mttr_seconds.toFixed(1)}s`) : "–"} cls="good" />
+                onClick={() => openSessions(t.remediatedSessions, remediatedRows)} hint={t.clickHint} />
+          <Tile k={t.mttr} v={stats ? (stats.mttr_seconds == null ? "–" : `${stats.mttr_seconds.toFixed(1)}s`) : "–"} cls="good"
+                onClick={() => openSessions(t.mttrSessions, remediatedRows)} hint={t.clickHint} />
           <Tile k={t.residualRisk} v={stats ? String(stats.residual_risk) : "–"} cls="warn"
-                onClick={() => setModal({ kind: "sessions", title: t.landedSessions, rows: landedRows })} hint={t.clickHint} />
+                onClick={() => openSessions(t.residualSessions, residualRows)} hint={t.clickHint} />
         </div>
 
         <div className="grid2" style={{ marginTop: 20 }}>

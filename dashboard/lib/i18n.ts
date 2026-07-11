@@ -38,6 +38,11 @@ export interface Dict {
   statusLabel: string;
   landedSessions: string;
   remediatedSessions: string;
+  allSessions: string;
+  blockedSessions: string;
+  detectedSessions: string;
+  mttrSessions: string;
+  residualSessions: string;
   noneYet: string;
 
   scoreboard: string;
@@ -63,6 +68,8 @@ export interface Dict {
   colAttack: string;
   colRemediation: string;
   noSessions: string;
+  pending: string;
+  notNeeded: string;
 
   redTeamMatrix: string;
   matrixId: string;
@@ -116,6 +123,11 @@ export const translations: Record<Lang, Dict> = {
     statusLabel: "Status",
     landedSessions: "Attacks that landed (recent)",
     remediatedSessions: "Remediated sessions (recent)",
+    allSessions: "Recent attacks (all outcomes)",
+    blockedSessions: "Blocked attacks (recent)",
+    detectedSessions: "Detected attacks (recent)",
+    mttrSessions: "Remediations with time-to-fix (recent)",
+    residualSessions: "Residual risk — landed & not yet remediated",
     noneYet: "None in the recent window.",
     cat: { Edge: "Edge", Detection: "Detection", Agents: "Agents", Runtime: "Runtime", Data: "Data", Ops: "Ops" },
 
@@ -142,6 +154,8 @@ export const translations: Record<Lang, Dict> = {
     colAttack: "attack",
     colRemediation: "remediation / MTTR",
     noSessions: "No sessions yet.",
+    pending: "pending",
+    notNeeded: "not needed",
 
     redTeamMatrix: "Red team attack matrix",
     matrixId: "ID",
@@ -195,6 +209,11 @@ export const translations: Record<Lang, Dict> = {
     statusLabel: "狀態",
     landedSessions: "成功穿透的攻擊（近期）",
     remediatedSessions: "已修復的工作階段（近期）",
+    allSessions: "近期攻擊（所有結果）",
+    blockedSessions: "已攔截的攻擊（近期）",
+    detectedSessions: "已偵測的攻擊（近期）",
+    mttrSessions: "含修復時間的修復紀錄（近期）",
+    residualSessions: "殘餘風險 — 已穿透且尚未修復",
     noneYet: "近期區間內沒有資料。",
     cat: { Edge: "邊界", Detection: "偵測", Agents: "代理", Runtime: "執行環境", Data: "資料", Ops: "維運" },
 
@@ -221,6 +240,8 @@ export const translations: Record<Lang, Dict> = {
     colAttack: "攻擊結果",
     colRemediation: "修復 / 修復時間",
     noSessions: "尚無連線紀錄。",
+    pending: "等待修復",
+    notNeeded: "無需修復",
 
     redTeamMatrix: "紅隊攻擊矩陣",
     matrixId: "ID",
