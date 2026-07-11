@@ -47,6 +47,27 @@ Two instruments:
   revocation is a bit flip; the cost is dominated by the OS process kill.
 - **κ total p99 ≈ 1.8 ms** — sub-frame containment once detection has fired.
 
+## Live δ/κ from the deployed OCI battle (snapshot 2026-07-11)
+
+Measured on the running system (n=424 blocked attacks, n=245 remediations via
+`/api/events`; see `live-latency-snapshot.json` and Figure 4 in `figures.html`):
+
+| quantity | live p50 | live p95 | live p99 | harness p50 |
+|---|--:|--:|--:|--:|
+| δ detection (boundary block) | **12 ms** | 11.9 s | 12.3 s | 33 µs (compute) |
+| κ containment (orchestrated) | **10.4 s** | 11.2 s | 12.8 s | 0.5 ms (kill primitive) |
+
+**The finding.** δ is bimodal — most attacks are blocked at the boundary in
+milliseconds, but the few that reach the throttled hosted LLM add ~12 s (the Groq
+free-tier rate limit, not detection). κ in production is **~10 s**, three orders of
+magnitude above the raw kill primitive (509 µs), because the deployed containment is
+*orchestrated*: green-team **polling** + an HTTP revoke + a **Docker container
+restart**. The mechanism is cheap; the latency lives in the orchestration. This is a
+concrete, measured optimization target — event-driven kill (no poll) and SIGKILL (no
+restart) would collapse κ toward the primitive, tightening the blast-radius bound
+`B ∝ (δ+κ)` by orders of magnitude. Reporting both the *primitive* and the
+*orchestrated* κ is the honest, useful story.
+
 ## What this substantiates for the paper
 
 - **The `(δ+κ)` response time is ≈ 0.5 ms p50 / ≈ 2 ms p99.** By the containment

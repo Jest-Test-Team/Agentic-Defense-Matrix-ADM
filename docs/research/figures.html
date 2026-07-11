@@ -108,8 +108,19 @@
     <p class="note">Data: <code>docs/research/overhead-results.json</code> (<code>./cmd/overhead</code>). Overhead% = rate·(ns/op)/10⁷ on one core.</p>
   </section>
 
+  <section class="fig">
+    <h2>Figure 4 — Live δ/κ from the running OCI battle</h2>
+    <p class="cap">CDFs measured on the <b>deployed</b> system (snapshot 2026-07-11, n=424 blocked attacks, n=245 remediations from <code style="font-family:var(--mono)">/api/events</code>). <b>δ</b> is bimodal: most attacks are blocked at the boundary in <b>~12 ms</b> (p50), with a tail near 12 s for the few that reach the throttled hosted LLM. <b>κ</b> here is the <b>fully orchestrated</b> containment (green-team poll → HTTP revoke → <b>Docker container restart</b>), p50 ≈ 10.4 s — three orders above the raw kill <i>primitive</i> in Figure/harness (509 µs). The gap is the research point: <b>the mechanism is cheap; the latency lives in orchestration</b> (polling + restart), which event-driven kill would collapse.</p>
+    <svg id="live" viewBox="0 0 720 300" role="img" aria-label="Live delta and kappa CDFs"></svg>
+    <div class="legend">
+      <span><span class="sw" style="border-color:var(--blue)"></span>δ detection (boundary block)</span>
+      <span><span class="sw" style="border-color:var(--violet)"></span>κ containment (orchestrated)</span>
+    </div>
+    <p class="note">Live snapshot: <code>docs/research/live-latency-snapshot.json</code>. Regenerate: <code>curl …/api/events?limit=1000</code> or, once redeployed, <code>curl …/api/latency</code> (returns the CDF directly).</p>
+  </section>
+
   <footer>
-    Reproduce: <code style="font-family:var(--mono)">go run ./cmd/sweep</code> · <code style="font-family:var(--mono)">./cmd/latency</code> · <code style="font-family:var(--mono)">./cmd/ablation</code> · <code style="font-family:var(--mono)">./cmd/overhead</code>. Formalization in <code>docs/research/</code>.
+    Reproduce: <code style="font-family:var(--mono)">go run ./cmd/sweep</code> · <code style="font-family:var(--mono)">./cmd/latency</code> · <code style="font-family:var(--mono)">./cmd/ablation</code> · <code style="font-family:var(--mono)">./cmd/overhead</code>. Live: <code style="font-family:var(--mono)">/api/latency</code>. Formalization in <code>docs/research/</code>.
   </footer>
 </div>
 
@@ -134,6 +145,12 @@ const LAT = [
   {name:"ADM drift · time-to-flag",    ms:0.033,  c:"blue", measured:true},
   {name:"Llama Guard · 8B inference (ref.)", ms:200, c:"red", measured:false},
 ];
+// Live δ/κ CDFs from the running OCI battle (docs/research/live-latency-snapshot.json)
+const LIVE = {
+  qs:[.05,.10,.25,.50,.75,.90,.95,.99,1.0],
+  delta:[0,0,0,12,11500,11792,11897,12278,12484],
+  kappa:[9829,9955,10170,10378,10579,10855,11194,12756,12862],
+};
 // CPU overhead % vs event rate (from cmd/overhead)
 const OVH = [
   {rate:10000,  lf:0.31,  mx:0.62},
@@ -259,11 +276,48 @@ function overheadChart(){
   svg.appendChild(el("text",{x:xpos(p.rate)+6,y:ypos(p.mx)-6,class:"barlab",fill:css("--yellow")})).textContent="6.2%";
 }
 
+// ---- live CDF chart (log-x latency ms, y = cumulative probability) -----------
+function liveCDF(){
+  const svg=document.getElementById("live"); if(!svg) return; svg.textContent="";
+  const W=720,H=300,L=52,R=24,T=16,B=42;
+  const lo=Math.log10(0.5), hi=Math.log10(20000);
+  const xpos=ms=>L+(Math.log10(Math.max(ms,0.5))-lo)/(hi-lo)*(W-L-R);
+  const ypos=q=>T+(1-q)*(H-T-B);
+  // y grid (probability)
+  [0,.25,.5,.75,1].forEach(q=>{
+    const y=ypos(q);
+    svg.appendChild(el("line",{x1:L,y1:y,x2:W-R,y2:y,class:"grid"}));
+    svg.appendChild(el("text",{x:L-6,y:y+3,"text-anchor":"end",class:"tick"})).textContent=(q*100)+"%";
+  });
+  // x ticks (decades in ms)
+  [1,10,100,1000,10000].forEach(v=>{
+    const x=xpos(v);
+    svg.appendChild(el("line",{x1:x,y1:T,x2:x,y2:H-B,class:"grid"}));
+    svg.appendChild(el("text",{x:x,y:H-B+16,"text-anchor":"middle",class:"tick"}))
+      .textContent = v>=1000?(v/1000)+"s":v+"ms";
+  });
+  svg.appendChild(el("text",{x:(L+W-R)/2,y:H-4,"text-anchor":"middle",class:"alab"})).textContent="latency (log scale) — δ, κ end-to-end";
+  svg.appendChild(el("line",{x1:L,y1:T,x2:L,y2:H-B,class:"axis"}));
+  svg.appendChild(el("line",{x1:L,y1:H-B,x2:W-R,y2:H-B,class:"axis"}));
+  const curve=(arr,color)=>{
+    const pts=LIVE.qs.map((q,i)=>[xpos(arr[i]),ypos(q)]);
+    const d=pts.map((p,i)=>(i?"L":"M")+p[0].toFixed(1)+" "+p[1].toFixed(1)).join(" ");
+    svg.appendChild(el("path",{d,fill:"none",stroke:css(color),"stroke-width":2.4}));
+    pts.forEach(p=>svg.appendChild(el("circle",{cx:p[0],cy:p[1],r:3,fill:css(color),stroke:css("--surface"),"stroke-width":1.4})));
+  };
+  curve(LIVE.delta,"--blue");
+  curve(LIVE.kappa,"--violet");
+  // p50 markers
+  svg.appendChild(el("text",{x:xpos(12)+4,y:ypos(.5)-6,class:"barlab",fill:css("--blue")})).textContent="δ p50 12ms";
+  svg.appendChild(el("text",{x:xpos(10378)-4,y:ypos(.5)+16,"text-anchor":"end",class:"barlab",fill:css("--violet")})).textContent="κ p50 10.4s";
+}
+
 function drawAll(){
   lineChart("fpr","mf","pf","--red",true);
   lineChart("det","md","pd","--blue",false);
   asymChart();
   overheadChart();
+  liveCDF();
 }
 document.getElementById("themebtn").addEventListener("click",()=>{
   const r=document.documentElement;
