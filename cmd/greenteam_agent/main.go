@@ -1,9 +1,7 @@
 // Command greenteam_agent is the green-team remediation service. It watches the
-// battle event stream for attacks that landed (and, secondarily, SIEM alerts)
-// and performs the README response chain for real: revoke the offending session
-// on the gateway, then contain the affected agent by restarting its container.
-// Every action is emitted as a battle event keyed by the same session_id so the
-// analysis engine can correlate attack -> remediation and measure MTTR.
+// battle event stream for attacks that landed and performs remediation: optional
+// hosted-LLM triage (severity / revoke / restart targets / SOC summary), then
+// revoke + Docker restart of adm.role=agent containers.
 package main
 
 import (
@@ -19,6 +17,7 @@ import (
 	"time"
 
 	"github.com/adm/pkg/battle"
+	"github.com/adm/pkg/llmops"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
@@ -31,7 +30,8 @@ type config struct {
 	siemURL    string
 	redisURL   string
 	dryRun     bool
-	agentLabel string // label selecting containers green may touch
+	agentLabel string
+	greenLLM   bool
 }
 
 func loadConfig() config {
@@ -41,6 +41,7 @@ func loadConfig() config {
 		redisURL:   envOr("ADM_REDIS_URL", "redis://localhost:6379"),
 		dryRun:     envOr("ADM_GREEN_DRY_RUN", "false") == "true",
 		agentLabel: envOr("ADM_AGENT_LABEL", "adm.role=agent"),
+		greenLLM:   llmops.GreenEnabled(),
 	}
 }
 
@@ -50,17 +51,19 @@ type greenTeam struct {
 	http    *http.Client
 	docker  *client.Client
 	rdb     *redis.Client
+	llm     *llmops.Client
 }
 
 func main() {
 	cfg := loadConfig()
-	log.Printf("greenteam: gateway=%s siem=%s dry_run=%v label=%q",
-		cfg.gatewayURL, cfg.siemURL, cfg.dryRun, cfg.agentLabel)
+	log.Printf("greenteam: gateway=%s siem=%s dry_run=%v label=%q green_llm=%v",
+		cfg.gatewayURL, cfg.siemURL, cfg.dryRun, cfg.agentLabel, cfg.greenLLM)
 
 	g := &greenTeam{
 		cfg:     cfg,
 		emitter: battle.NewEmitter(),
 		http:    &http.Client{Timeout: 10 * time.Second},
+		llm:     llmops.New(),
 	}
 	defer g.emitter.Close()
 
@@ -84,7 +87,6 @@ func main() {
 	log.Println("greenteam: shutdown complete")
 }
 
-// watchStream tails the battle stream and remediates landed attacks.
 func (g *greenTeam) watchStream(ctx context.Context) {
 	if g.rdb == nil {
 		log.Println("greenteam: no redis; stream watch disabled")
@@ -128,19 +130,30 @@ func (g *greenTeam) watchStream(ctx context.Context) {
 	}
 }
 
-// remediate runs the response chain for a landed attack.
 func (g *greenTeam) remediate(ctx context.Context, attack battle.Event) {
 	log.Printf("greenteam: remediating session=%s technique=%s target=%s",
 		attack.SessionID, attack.Technique, attack.Target)
 
-	// 1. Revoke the session on the gateway.
-	g.revokeSession(ctx, attack)
+	triage := llmops.DefaultTriage(attack)
+	if g.cfg.greenLLM {
+		if tr, err := g.llm.TriageRemediation(ctx, attack); err != nil {
+			log.Printf("greenteam: LLM triage failed, using fallback: %v", err)
+		} else {
+			triage = *tr
+		}
+	}
 
-	// 2. Contain the affected agent container.
-	g.containAgent(ctx, attack)
+	if triage.Revoke {
+		g.revokeSession(ctx, attack, triage)
+	} else {
+		g.emit(ctx, attack, battle.OutcomeRevoked, "skipped",
+			"triage: revoke=false — "+triage.Summary, 0, triage)
+	}
+
+	g.containAgent(ctx, attack, triage)
 }
 
-func (g *greenTeam) revokeSession(ctx context.Context, attack battle.Event) {
+func (g *greenTeam) revokeSession(ctx context.Context, attack battle.Event, triage llmops.TriageResult) {
 	start := time.Now()
 	outcome := battle.OutcomeRevoked
 	detail := "session revoked on gateway"
@@ -161,23 +174,32 @@ func (g *greenTeam) revokeSession(ctx context.Context, attack battle.Event) {
 			}
 		}
 	}
+	if triage.Summary != "" {
+		detail = detail + " | " + triage.Summary
+	}
 
-	g.emit(ctx, attack, battle.OutcomeRevoked, outcome, detail, time.Since(start).Milliseconds())
+	g.emit(ctx, attack, battle.OutcomeRevoked, outcome, detail, time.Since(start).Milliseconds(), triage)
 }
 
-func (g *greenTeam) containAgent(ctx context.Context, attack battle.Event) {
+func (g *greenTeam) containAgent(ctx context.Context, attack battle.Event, triage llmops.TriageResult) {
 	start := time.Now()
-
-	if g.cfg.dryRun || g.docker == nil {
-		detail := "[dry-run] would restart agent container for target " + attack.Target
-		if g.docker == nil && !g.cfg.dryRun {
-			detail = "docker unavailable; skipped container containment"
-		}
-		g.emit(ctx, attack, battle.OutcomeRestarted, battle.OutcomeRestarted, detail, time.Since(start).Milliseconds())
+	targets := triage.RestartTargets
+	if len(targets) == 0 {
+		// Nothing to restart — still emit summary for SOC.
+		g.emit(ctx, attack, battle.OutcomeRestarted, battle.OutcomeRestarted,
+			"triage: no restart targets — "+triage.Summary, time.Since(start).Milliseconds(), triage)
 		return
 	}
 
-	// Only ever touch containers explicitly labelled as agents.
+	if g.cfg.dryRun || g.docker == nil {
+		detail := "[dry-run] would restart " + strings.Join(targets, ",") + " — " + triage.Summary
+		if g.docker == nil && !g.cfg.dryRun {
+			detail = "docker unavailable; skipped container containment — " + triage.Summary
+		}
+		g.emit(ctx, attack, battle.OutcomeRestarted, battle.OutcomeRestarted, detail, time.Since(start).Milliseconds(), triage)
+		return
+	}
+
 	parts := strings.SplitN(g.cfg.agentLabel, "=", 2)
 	f := filters.NewArgs()
 	if len(parts) == 2 {
@@ -188,22 +210,23 @@ func (g *greenTeam) containAgent(ctx context.Context, attack battle.Event) {
 	containers, err := g.docker.ContainerList(ctx, types.ContainerListOptions{All: true, Filters: f})
 	if err != nil {
 		g.emit(ctx, attack, battle.OutcomeError, battle.OutcomeError,
-			"container list failed: "+err.Error(), time.Since(start).Milliseconds())
+			"container list failed: "+err.Error(), time.Since(start).Milliseconds(), triage)
 		return
 	}
 
 	restarted := 0
-	for _, c := range containers {
-		// Prefer the container whose name matches the attack target (e.g. executor).
-		if attack.Target != "" && !nameMatches(c.Names, attack.Target) {
-			continue
-		}
-		timeout := 5
-		if err := g.docker.ContainerRestart(ctx, c.ID, container.StopOptions{Timeout: &timeout}); err == nil {
-			restarted++
+	for _, want := range targets {
+		for _, c := range containers {
+			if !nameMatches(c.Names, want) {
+				continue
+			}
+			timeout := 5
+			if err := g.docker.ContainerRestart(ctx, c.ID, container.StopOptions{Timeout: &timeout}); err == nil {
+				restarted++
+			}
 		}
 	}
-	// If nothing matched the target name, restart all labelled agents as a fallback.
+	// Fallback: if triage named a target but none matched, restart all labelled agents.
 	if restarted == 0 {
 		for _, c := range containers {
 			timeout := 5
@@ -219,7 +242,10 @@ func (g *greenTeam) containAgent(ctx context.Context, attack battle.Event) {
 		outcome = battle.OutcomeError
 		detail = "no agent containers matched"
 	}
-	g.emit(ctx, attack, battle.OutcomeRestarted, outcome, detail, time.Since(start).Milliseconds())
+	if triage.Summary != "" {
+		detail = detail + " | " + triage.Summary
+	}
+	g.emit(ctx, attack, battle.OutcomeRestarted, outcome, detail, time.Since(start).Milliseconds(), triage)
 }
 
 func nameMatches(names []string, target string) bool {
@@ -231,9 +257,6 @@ func nameMatches(names []string, target string) bool {
 	return false
 }
 
-// pollAlerts periodically reads SIEM alerts and surfaces them as blue-team
-// detection events so the dashboard shows a detection rate. SIEM alerts are not
-// session-keyed, so these are aggregate signals.
 func (g *greenTeam) pollAlerts(ctx context.Context) {
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
@@ -272,8 +295,23 @@ func (g *greenTeam) pollAlerts(ctx context.Context) {
 	}
 }
 
-func (g *greenTeam) emit(ctx context.Context, attack battle.Event, action, outcome, detail string, latency int64) {
-	sev := attack.Severity
+func (g *greenTeam) emit(ctx context.Context, attack battle.Event, action, outcome, detail string, latency int64, triage llmops.TriageResult) {
+	sev := triage.Severity
+	if sev < 1 {
+		sev = attack.Severity
+	}
+	labels := map[string]string{
+		"action":  action,
+		"summary": triage.Summary,
+		"triage":  "revoke=" + strconv.FormatBool(triage.Revoke) + ";restart=" + strings.Join(triage.RestartTargets, ","),
+	}
+	if cid := attack.Labels["chain_id"]; cid != "" {
+		labels["chain_id"] = cid
+	}
+	if step := attack.Labels["chain_step"]; step != "" {
+		labels["chain_step"] = step
+	}
+
 	g.emitter.Emit(ctx, &battle.Event{
 		Team:      battle.TeamGreen,
 		Kind:      battle.KindRemediation,
@@ -285,7 +323,7 @@ func (g *greenTeam) emit(ctx context.Context, attack battle.Event, action, outco
 		Severity:  sev,
 		LatencyMS: latency,
 		Detail:    detail,
-		Labels:    map[string]string{"action": action},
+		Labels:    labels,
 	})
 }
 

@@ -191,27 +191,37 @@ row per session.
 - Classifies the response: HTTP 4xx / empty / policy-blocked ⇒ `blocked`;
   2xx with content ⇒ `allowed` (potential landing).
 - Emits a `team=red, kind=attack` battle event with outcome, latency, technique,
-  variant and labels.
+  variant and labels (`mutation`, `lang`, `chain_id`, …).
+- **Adaptive LLM (optional):** when `ADM_RED_LLM=true` and a landing occurs, the
+  agent calls hosted LLM (Groq → X.AI via `pkg/llmops`) to mutate the next
+  payload and pick the next RT technique within the same `chain_id` (up to
+  `ADM_CHAIN_MAX_STEPS`, default 5). Failed LLM calls fall back to the
+  deterministic corpus. Day-to-day corpus fire does **not** call the LLM.
 - Config: `ADM_GATEWAY_URL`, `ADM_ANALYSIS_URL`, `ADM_REDIS_URL`,
-  `ADM_CORPUS_SIZE`, `ADM_ATTACK_INTERVAL`, `ADM_ATTACK_CONCURRENCY`, `ADM_MODEL`.
+  `ADM_CORPUS_SIZE`, `ADM_ATTACK_INTERVAL`, `ADM_ATTACK_CONCURRENCY`, `ADM_MODEL`,
+  `ADM_RED_LLM`, `ADM_CHAIN_MAX_STEPS`, plus the shared `ADM_LLM_*` keys.
 
 ---
 
 ## 6. 🟢 Green team — remediation service (`cmd/greenteam_agent`)
 
-Subscribes to blue-team **SIEM alerts** (`GET /api/v1/alerts` poll + Redis
-`adm:battle` stream for `kind=defense outcome=detected`). On an alert it runs the
-README response chain — **for real**:
+Subscribes to Redis `adm:battle` for red attacks with `outcome=allowed` (and
+secondarily polls SIEM `GET /api/v1/alerts`). On a landing it remediates
+**for real**:
 
-1. **Revoke session** → `POST {gateway}/v1/admin/revoke/{session_id}`.
-2. **Contain the agent** → Docker API kill+restart of the affected agent
-   container (executor/planner/summarizer), guarded to only touch containers
-   labelled `adm.role=agent` so it can never harm infra.
-3. **Log** → emit `team=green, kind=remediation` events for each action
-   (`revoked`, `killed`, `restarted`), keyed by `session_id` for correlation.
+1. **LLM triage (optional):** when `ADM_GREEN_LLM=true`, `pkg/llmops.TriageRemediation`
+   returns severity, whether to revoke, which agent(s) to restart
+   (`planner|executor|summarizer` only), and a SOC `summary`. On LLM failure,
+   fall back to always-revoke + restart by attack target.
+2. **Revoke session** (if triage says so) → `POST {gateway}/v1/admin/revoke/{session_id}`.
+3. **Contain the agent** → Docker API restart of labelled `adm.role=agent`
+   containers matching triage targets (never infra).
+4. **Log** → emit `team=green, kind=remediation` with `labels.summary` /
+   `labels.triage`, keyed by `session_id` (and `chain_id` when present).
 
 A `ADM_GREEN_DRY_RUN=true` switch logs intended actions without calling
-Docker/gateway (useful on hosts without the Docker socket mounted).
+Docker/gateway (useful on hosts without the Docker socket mounted); LLM summary
+may still be generated.
 
 ---
 
@@ -403,6 +413,6 @@ The dashboard renders these live; the same numbers are queryable from
 - SPIRE-issued mTLS between teams and the analysis ingest.
 - Replace poll-based alert consumption with a real Redis consumer group.
 - Kibana dashboards on the same Elasticsearch index for deep forensics.
-- Adaptive red team (LLM-guided mutation toward payloads that landed).
+- ~~Adaptive red team (LLM-guided mutation toward payloads that landed).~~ **done** — see §5 and ADR-008.
 - Move Postgres to OCI Autonomous DB (Always Free) when deploying to cloud.
 ```

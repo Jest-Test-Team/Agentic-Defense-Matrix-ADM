@@ -109,6 +109,32 @@ export interface BattleEvent {
   labels?: Record<string, string>;
 }
 
+export interface AttackChain {
+  id: string;
+  started_at: string;
+  updated_at: string;
+  status: string;
+  strategy: string;
+  landed_steps: number;
+  technique_path: string[];
+  remediation_summary: string;
+}
+
+export interface AttackChainStep {
+  id: string;
+  chain_id: string;
+  step_index: number;
+  session_id: string;
+  event_id?: string | null;
+  technique: string;
+  variant: string;
+  outcome: string;
+  mutation_source: string;
+  strategy_reason: string;
+  payload_preview: string;
+  ts: string;
+}
+
 export interface SearchHit {
   score: number;
   event: BattleEvent;
@@ -164,6 +190,14 @@ export const api = {
   },
   timeline: (c: ApiConfig, limit = 40) =>
     getJSON<{ sessions: SessionRow[] }>(`${c.analysis}/api/timeline?limit=${limit}`),
+  chains: (c: ApiConfig, status = "landed", limit = 40) =>
+    getJSON<{ chains: AttackChain[] }>(
+      `${c.analysis}/api/chains?status=${encodeURIComponent(status)}&limit=${limit}`
+    ),
+  chain: (c: ApiConfig, id: string) =>
+    getJSON<{ chain: AttackChain; steps: AttackChainStep[] }>(
+      `${c.analysis}/api/chains/${encodeURIComponent(id)}`
+    ),
   analysisReady: (c: ApiConfig) => probe(`${c.analysis}/ready`),
   analysisHealth: (c: ApiConfig) => probe(`${c.analysis}/health`),
   gatewayHealth: (c: ApiConfig) => probe(`${c.gateway}/v1/health`),

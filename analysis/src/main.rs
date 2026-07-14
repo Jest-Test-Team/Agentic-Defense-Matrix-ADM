@@ -5,8 +5,11 @@
 //! - `GET  /api/stats`         scoreboard (block/detection/landing rate, MTTR)
 //! - `GET  /api/timeline`      recent correlated sessions
 //! - `GET  /api/events`        recent raw events
+//! - `GET  /api/chains`        successful attack chains
+//! - `GET  /api/chains/:id`    chain detail + steps
 //! - `GET  /api/stream`        Server-Sent-Events live feed
 //! - `GET  /`                  static dashboard (db/be/fe in one binary)
+//!                             (ingest also upserts attack_chains when labels.chain_id set)
 //!
 //! Postgres (via DATABASE_URL) is the authoritative durable log and computes all
 //! stats on its own. Elasticsearch (via optional ELASTIC_URL) is an extra search
@@ -72,6 +75,8 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/latency", get(handlers::latency))
         .route("/api/search", get(handlers::search))
         .route("/api/stream", get(handlers::stream))
+        .route("/api/chains", get(handlers::chains))
+        .route("/api/chains/:id", get(handlers::chain_detail))
         .layer(CorsLayer::permissive())
         .with_state(state);
 

@@ -83,3 +83,33 @@ pub struct SessionRow {
     pub remediation_outcome: Option<String>,
     pub mttr_seconds: Option<f64>,
 }
+
+/// List row for `GET /api/chains`.
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct ChainRow {
+    pub id: uuid::Uuid,
+    pub started_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub status: String,
+    pub strategy: String,
+    pub landed_steps: i32,
+    pub technique_path: Vec<String>,
+    pub remediation_summary: String,
+}
+
+/// Step row for `GET /api/chains/:id`.
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct ChainStepRow {
+    pub id: uuid::Uuid,
+    pub chain_id: uuid::Uuid,
+    pub step_index: i32,
+    pub session_id: String,
+    pub event_id: Option<uuid::Uuid>,
+    pub technique: String,
+    pub variant: String,
+    pub outcome: String,
+    pub mutation_source: String,
+    pub strategy_reason: String,
+    pub payload_preview: String,
+    pub ts: DateTime<Utc>,
+}

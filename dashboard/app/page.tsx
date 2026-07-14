@@ -11,6 +11,8 @@ import {
   type BattleEvent,
   type SystemService,
   type LlmStatus,
+  type AttackChain,
+  type AttackChainStep,
 } from "@/lib/api";
 import { translations, getLang, setLang, type Lang, type Dict } from "@/lib/i18n";
 
@@ -60,6 +62,7 @@ const TECH_NAME: Record<string, string> = Object.fromEntries(
 type Modal =
   | { kind: "svc"; svc: SystemService }
   | { kind: "sessions"; title: string; rows: SessionRow[] }
+  | { kind: "chain"; chain: AttackChain; steps: AttackChainStep[] }
   | null;
 
 export default function Page() {
@@ -69,6 +72,7 @@ export default function Page() {
   const [cfg, setCfg] = useState<ApiConfig | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
   const [sessions, setSessions] = useState<SessionRow[]>([]);
+  const [chains, setChains] = useState<AttackChain[]>([]);
   const [services, setServices] = useState<SystemService[]>([]);
   const [llm, setLlm] = useState<LlmStatus | null>(null);
   const [events, setEvents] = useState<BattleEvent[]>([]);
@@ -83,6 +87,13 @@ export default function Page() {
   const blockedRows = sessions.filter((s) => s.attack_outcome === "blocked");
   const residualRows = landedRows.filter((s) => !s.remediation_outcome);
   const openSessions = (title: string, rows: SessionRow[]) => setModal({ kind: "sessions", title, rows });
+  const openChain = async (id: string) => {
+    if (!cfg) return;
+    try {
+      const detail = await api.chain(cfg, id);
+      setModal({ kind: "chain", chain: detail.chain, steps: detail.steps ?? [] });
+    } catch {}
+  };
 
   useEffect(() => {
     setCfg(getConfig());
@@ -112,6 +123,10 @@ export default function Page() {
     try {
       const tl = await api.timeline(cfg, TIMELINE_LIMIT);
       setSessions(tl.sessions ?? []);
+    } catch {}
+    try {
+      const ch = await api.chains(cfg, "landed", 40);
+      setChains(ch.chains ?? []);
     } catch {}
   }, [cfg]);
 

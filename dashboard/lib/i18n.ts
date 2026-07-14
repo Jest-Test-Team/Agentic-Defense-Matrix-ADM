@@ -73,6 +73,16 @@ export interface Dict {
   pending: string;
   notNeeded: string;
 
+  attackChains: string;
+  chainStrategy: string;
+  chainSteps: string;
+  chainSummary: string;
+  chainStatus: string;
+  chainNone: string;
+  chainDetail: string;
+  chainMutationSource: string;
+  chainPayload: string;
+
   redTeamMatrix: string;
   matrixId: string;
   matrixAttack: string;
@@ -127,9 +137,9 @@ export const translations: Record<Lang, Dict> = {
       "Agentic Defense Matrix (ADM) is a defense-in-depth system for AI agents that can plan tasks and call tools. Instead of relying only on prompt filtering, it watches what agents actually do — at the API gateway, the policy engine, and the operating-system level — and contains the blast radius when something goes wrong.",
       "This console shows a live security exercise running on the deployed system:",
     ],
-    aboutRed: "Red team continuously attacks the system with thousands of adversarial prompts and tool-call attempts — prompt injection, reverse shells, data exfiltration, container escape, and more.",
+    aboutRed: "Red team continuously attacks the system with thousands of adversarial prompts and tool-call attempts — prompt injection, reverse shells, data exfiltration, container escape, and more. On a landing it can ask the hosted LLM for an adaptive next step and persist a successful attack chain.",
     aboutBlue: "Blue team (the gateway, SIEM, and policy engine) detects the attacks and blocks them at the boundary.",
-    aboutGreen: "Green team automatically remediates any attack that slips through — revoking the session and restarting the affected agent.",
+    aboutGreen: "Green team automatically remediates any attack that slips through — LLM triage decides revoke / which agent to restart, and writes a SOC summary to the dashboard.",
     aboutHowto: "Every event is logged to a database and scored, so you can see in real time how well the defenses hold. The scoreboard below updates every few seconds; the feed on the left streams each attack and defense as it happens.",
 
     systemStatus: "System status",
@@ -187,11 +197,21 @@ export const translations: Record<Lang, Dict> = {
     pending: "pending",
     notNeeded: "not needed",
 
+    attackChains: "Successful attack chains",
+    chainStrategy: "strategy",
+    chainSteps: "steps",
+    chainSummary: "remediation summary",
+    chainStatus: "status",
+    chainNone: "No successful attack chains yet.",
+    chainDetail: "Attack chain detail",
+    chainMutationSource: "source",
+    chainPayload: "payload",
+
     redTeamMatrix: "Red team attack matrix",
     matrixId: "ID",
     matrixAttack: "Attack",
     matrixTechnique: "Technique",
-    matrixNote: "These 30 rows are the base attack classes. At runtime the red team deterministically expands them into 10,000 enumerated campaign variants (RT-00001 … RT-10000) by mutating each seed (base64, hex, zero-width, case-flip, concat-split, …) and paraphrasing across languages.",
+    matrixNote: "These 30 rows are the base attack classes. At runtime the red team deterministically expands them into 10,000 enumerated campaign variants (RT-00001 … RT-10000). On a landing, adaptive LLM mutation can append follow-up steps to an attack chain.",
     matrixViewAll: "Browse all 10,000 variants",
     matrixFullTitle: "Attack matrix — all 10,000 variants",
     matrixIntro: "Every enumerated variant the red team fires, generated deterministically (seed 1337). Each derives from one of the 30 base techniques via a mutation + language paraphrase. Search by id, technique, name, tag, mutation, or payload text.",
@@ -244,9 +264,9 @@ export const translations: Record<Lang, Dict> = {
       "Agentic Defense Matrix（ADM，代理式防禦矩陣）是一套為「會自己規劃任務、會呼叫工具的 AI 代理」所設計的縱深防禦系統。它不只靠過濾提示詞，而是實際觀察代理的行為——在 API 閘道、政策引擎，以及作業系統層——並在出問題時，把影響範圍控制到最小。",
       "這個看板呈現一場正在運行的即時攻防演練：",
     ],
-    aboutRed: "紅隊 持續用上千種對抗性提示與工具呼叫攻擊系統——提示注入、反向 shell、資料外洩、容器逃逸等等。",
+    aboutRed: "紅隊 持續用上千種對抗性提示與工具呼叫攻擊系統——提示注入、反向 shell、資料外洩、容器逃逸等等。攻擊落地後可用託管 LLM 做 adaptive 下一步，並把成功攻擊鏈寫入資料庫。",
     aboutBlue: "藍隊（閘道、SIEM、政策引擎）負責偵測攻擊，並在邊界就把它們攔下來。",
-    aboutGreen: "綠隊 會自動修復任何漏網的攻擊——撤銷該連線，並重啟受影響的代理。",
+    aboutGreen: "綠隊 會自動修復任何漏網的攻擊——LLM triage 決定是否撤銷連線、重啟哪個代理，並產生給 SOC 的修復摘要。",
     aboutHowto: "每一筆事件都會寫入資料庫並計分，讓你即時看到防禦守得有多穩。下方的計分板每幾秒更新一次；左側的即時動態會把每一次攻擊與防禦即時串流出來。",
 
     systemStatus: "系統狀態",
@@ -304,11 +324,21 @@ export const translations: Record<Lang, Dict> = {
     pending: "等待修復",
     notNeeded: "無需修復",
 
+    attackChains: "成功攻擊鏈",
+    chainStrategy: "策略",
+    chainSteps: "步驟",
+    chainSummary: "修復摘要",
+    chainStatus: "狀態",
+    chainNone: "尚無成功攻擊鏈。",
+    chainDetail: "攻擊鏈詳情",
+    chainMutationSource: "來源",
+    chainPayload: "攻擊內容",
+
     redTeamMatrix: "紅隊攻擊矩陣",
     matrixId: "ID",
     matrixAttack: "攻擊",
     matrixTechnique: "技術",
-    matrixNote: "這 30 列是「基礎攻擊類別」。實際運行時，紅隊會以決定性方式，把每個基礎手法透過變異（base64、hex、零寬字元、大小寫翻轉、字串切割…）與跨語言改寫，展開成 10,000 個列舉出的攻擊變體（RT-00001 … RT-10000）。",
+    matrixNote: "這 30 列是「基礎攻擊類別」。實際運行時，紅隊會以決定性方式展開成 10,000 個變體；攻擊落地後，可用 LLM adaptive mutation 在同一攻擊鏈上追加後續步驟。",
     matrixViewAll: "瀏覽全部 10,000 個變體",
     matrixFullTitle: "攻擊矩陣 — 全部 10,000 個變體",
     matrixIntro: "紅隊實際發動的每一個列舉變體，以決定性方式產生（種子 1337）。每個變體都源自 30 個基礎手法之一，經過一次變異與語言改寫。可用 id、技術、名稱、標籤、變異方式或攻擊內容搜尋。",

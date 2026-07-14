@@ -1,7 +1,8 @@
 // Command redteam_agent is the continuous red-team attacker service. It expands
 // the base technique catalog into a large corpus and fires variants at the
-// target gateway on an interval, classifying each response and emitting a
-// battle event so the analysis engine can score the exercise.
+// target gateway on an interval. On a landing (outcome=allowed), when
+// ADM_RED_LLM=true, it asks the hosted LLM for an adaptive next step within the
+// same attack chain (chain_id).
 package main
 
 import (
@@ -20,6 +21,7 @@ import (
 	"time"
 
 	"github.com/adm/pkg/battle"
+	"github.com/adm/pkg/llmops"
 	"github.com/adm/pkg/redteam"
 	"github.com/google/uuid"
 )
@@ -31,24 +33,45 @@ type config struct {
 	concurrency int
 	model       string
 	seed        int64
+	redLLM      bool
+	maxSteps    int
 }
 
 func loadConfig() config {
-	c := config{
+	return config{
 		gatewayURL:  envOr("ADM_GATEWAY_URL", "http://localhost:8080"),
 		corpusSize:  envIntOr("ADM_CORPUS_SIZE", 10000),
 		interval:    time.Duration(envIntOr("ADM_ATTACK_INTERVAL_MS", 500)) * time.Millisecond,
 		concurrency: envIntOr("ADM_ATTACK_CONCURRENCY", 2),
 		model:       envOr("ADM_MODEL", "qwen2.5:0.5b"),
 		seed:        int64(envIntOr("ADM_CORPUS_SEED", 1337)),
+		redLLM:      llmops.RedEnabled(),
+		maxSteps:    envIntOr("ADM_CHAIN_MAX_STEPS", 5),
 	}
-	return c
+}
+
+// pendingStep is an LLM-proposed follow-up within an active chain.
+type pendingStep struct {
+	variant   redteam.AttackVariant
+	chainID   string
+	stepIndex int
+	strategy  string
+	source    string // llm_adaptive
+}
+
+type campaign struct {
+	cfg      config
+	emitter  *battle.Emitter
+	llm      *llmops.Client
+	client   *http.Client
+	pending  chan pendingStep
+	mu       sync.Mutex
 }
 
 func main() {
 	cfg := loadConfig()
-	log.Printf("redteam: gateway=%s corpus=%d interval=%s concurrency=%d model=%s",
-		cfg.gatewayURL, cfg.corpusSize, cfg.interval, cfg.concurrency, cfg.model)
+	log.Printf("redteam: gateway=%s corpus=%d interval=%s concurrency=%d model=%s red_llm=%v max_steps=%d",
+		cfg.gatewayURL, cfg.corpusSize, cfg.interval, cfg.concurrency, cfg.model, cfg.redLLM, cfg.maxSteps)
 
 	emitter := battle.NewEmitter()
 	defer emitter.Close()
@@ -62,7 +85,14 @@ func main() {
 
 	waitForGateway(ctx, cfg.gatewayURL)
 
-	client := &http.Client{Timeout: 30 * time.Second}
+	camp := &campaign{
+		cfg:     cfg,
+		emitter: emitter,
+		llm:     llmops.New(),
+		client:  &http.Client{Timeout: 30 * time.Second},
+		pending: make(chan pendingStep, 64),
+	}
+
 	jobs := make(chan redteam.AttackVariant)
 	var wg sync.WaitGroup
 
@@ -70,8 +100,23 @@ func main() {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for v := range jobs {
-				attack(ctx, client, emitter, cfg, v)
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case p, ok := <-camp.pending:
+					if !ok {
+						return
+					}
+					camp.attack(ctx, p.variant, p.chainID, p.stepIndex, p.strategy, p.source)
+				case v, ok := <-jobs:
+					if !ok {
+						return
+					}
+					// Start a new chain for corpus fires.
+					chainID := uuid.NewString()
+					camp.attack(ctx, v, chainID, 0, "", "deterministic")
+				}
 			}
 		}()
 	}
@@ -97,11 +142,10 @@ func main() {
 	}
 }
 
-// attack sends one variant and emits the classified outcome.
-func attack(ctx context.Context, client *http.Client, em *battle.Emitter, cfg config, v redteam.AttackVariant) {
+func (c *campaign) attack(ctx context.Context, v redteam.AttackVariant, chainID string, step int, strategy, source string) {
 	sessionID := "red-" + uuid.NewString()[:8]
 	start := time.Now()
-	status, body, err := send(ctx, client, cfg, sessionID, v)
+	status, body, err := send(ctx, c.client, c.cfg, sessionID, v)
 	latency := time.Since(start).Milliseconds()
 
 	outcome := classify(status, body, err)
@@ -110,7 +154,27 @@ func attack(ctx context.Context, client *http.Client, em *battle.Emitter, cfg co
 		detail = "transport error: " + err.Error()
 	}
 
-	em.Emit(ctx, &battle.Event{
+	preview := v.Payload
+	if len(preview) > 180 {
+		preview = preview[:180] + "…"
+	}
+
+	labels := map[string]string{
+		"mutation":        v.Mutation,
+		"lang":            v.Lang,
+		"tag":             v.Tag,
+		"endpoint":        string(v.Endpoint),
+		"chain_id":        chainID,
+		"chain_step":      strconv.Itoa(step),
+		"mutation_source": source,
+		"payload_preview": preview,
+	}
+	if strategy != "" {
+		labels["strategy"] = strategy
+		labels["strategy_reason"] = strategy
+	}
+
+	c.emitter.Emit(ctx, &battle.Event{
 		Team:      battle.TeamRed,
 		Kind:      battle.KindAttack,
 		Technique: v.Technique,
@@ -121,16 +185,77 @@ func attack(ctx context.Context, client *http.Client, em *battle.Emitter, cfg co
 		Severity:  v.Severity,
 		LatencyMS: latency,
 		Detail:    detail,
-		Labels: map[string]string{
-			"mutation": v.Mutation,
-			"lang":     v.Lang,
-			"tag":      v.Tag,
-			"endpoint": string(v.Endpoint),
-		},
+		Labels:    labels,
 	})
+
+	if outcome != battle.OutcomeAllowed || !c.cfg.redLLM {
+		return
+	}
+	if step+1 >= c.cfg.maxSteps {
+		log.Printf("redteam: chain %s hit max steps (%d)", chainID, c.cfg.maxSteps)
+		return
+	}
+
+	next, err := c.llm.AdaptiveMutate(ctx, llmops.AttackContext{
+		Technique: v.Technique,
+		Name:      v.Name,
+		Payload:   v.Payload,
+		Endpoint:  string(v.Endpoint),
+		Target:    v.Target,
+		Outcome:   outcome,
+		ChainStep: step,
+		Strategy:  strategy,
+	})
+	if err != nil {
+		log.Printf("redteam: adaptive mutate failed (fallback skip): %v", err)
+		return
+	}
+
+	ep := redteam.EndpointChat
+	if next.Endpoint == "tool" {
+		ep = redteam.EndpointTool
+	}
+	tgt := next.Target
+	if tgt == "" {
+		if ep == redteam.EndpointTool {
+			tgt = "executor"
+		} else {
+			tgt = "gateway"
+		}
+	}
+	follow := pendingStep{
+		variant: redteam.AttackVariant{
+			Technique: next.Technique,
+			Name:      "LLM-adaptive " + next.Technique,
+			Tag:       v.Tag,
+			Endpoint:  ep,
+			Target:    tgt,
+			Severity:  v.Severity,
+			Payload:   next.Payload,
+			Mutation:  "llm_adaptive",
+			Lang:      "llm",
+			VariantID: fmt.Sprintf("%s#llm%d", v.VariantID, step+1),
+		},
+		chainID:   chainID,
+		stepIndex: step + 1,
+		strategy:  firstNonEmpty(next.Strategy, next.Reason),
+		source:    "llm_adaptive",
+	}
+	select {
+	case c.pending <- follow:
+		log.Printf("redteam: queued adaptive step %d for chain %s technique=%s", follow.stepIndex, chainID, next.Technique)
+	default:
+		log.Printf("redteam: pending queue full; dropping adaptive step")
+	}
 }
 
-// send dispatches the variant to the appropriate gateway endpoint.
+func firstNonEmpty(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
+}
+
 func send(ctx context.Context, client *http.Client, cfg config, sessionID string, v redteam.AttackVariant) (int, []byte, error) {
 	var url string
 	var payload []byte
@@ -166,9 +291,6 @@ func send(ctx context.Context, client *http.Client, cfg config, sessionID string
 	return resp.StatusCode, b, nil
 }
 
-// classify maps an HTTP response to a battle outcome. A 2xx with non-empty
-// content is treated as a landing (the boundary let it through); 4xx / empty /
-// explicit block markers are treated as blocked.
 func classify(status int, body []byte, err error) string {
 	if err != nil {
 		return battle.OutcomeError

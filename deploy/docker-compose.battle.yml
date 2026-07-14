@@ -55,6 +55,14 @@ services:
       - ADM_ATTACK_INTERVAL_MS=${ADM_ATTACK_INTERVAL_MS:-500}
       - ADM_ATTACK_CONCURRENCY=${ADM_ATTACK_CONCURRENCY:-2}
       - ADM_MODEL=${ADM_MODEL:-qwen2.5:0.5b}
+      - ADM_RED_LLM=${ADM_RED_LLM:-true}
+      - ADM_CHAIN_MAX_STEPS=${ADM_CHAIN_MAX_STEPS:-5}
+      - ADM_LLM_MODE=${ADM_LLM_MODE:-openai}
+      - ADM_LLM_BASE_URL=${ADM_LLM_BASE_URL:-}
+      - ADM_LLM_API_KEY=${ADM_LLM_API_KEY:-}
+      - ADM_LLM_FALLBACK_BASE_URL=${ADM_LLM_FALLBACK_BASE_URL:-}
+      - ADM_LLM_FALLBACK_API_KEY=${ADM_LLM_FALLBACK_API_KEY:-}
+      - ADM_LLM_FALLBACK_MODEL=${ADM_LLM_FALLBACK_MODEL:-}
     depends_on:
       - analysis
     restart: unless-stopped
@@ -76,6 +84,14 @@ services:
       - ADM_REDIS_URL=redis://redis:6379
       - ADM_GREEN_DRY_RUN=${ADM_GREEN_DRY_RUN:-false}
       - ADM_AGENT_LABEL=adm.role=agent
+      - ADM_GREEN_LLM=${ADM_GREEN_LLM:-true}
+      - ADM_MODEL=${ADM_MODEL:-qwen2.5:0.5b}
+      - ADM_LLM_MODE=${ADM_LLM_MODE:-openai}
+      - ADM_LLM_BASE_URL=${ADM_LLM_BASE_URL:-}
+      - ADM_LLM_API_KEY=${ADM_LLM_API_KEY:-}
+      - ADM_LLM_FALLBACK_BASE_URL=${ADM_LLM_FALLBACK_BASE_URL:-}
+      - ADM_LLM_FALLBACK_API_KEY=${ADM_LLM_FALLBACK_API_KEY:-}
+      - ADM_LLM_FALLBACK_MODEL=${ADM_LLM_FALLBACK_MODEL:-}
     volumes:
       # Required for real container containment; remove and set ADM_GREEN_DRY_RUN=true
       # on hosts where mounting the docker socket is not acceptable.

@@ -12,7 +12,7 @@ use serde_json::json;
 use tokio_stream::wrappers::BroadcastStream;
 use tokio_stream::StreamExt;
 
-use crate::model::{AppState, BattleEvent, EventRow, SessionRow};
+use crate::model::{AppState, BattleEvent, ChainRow, ChainStepRow, EventRow, SessionRow};
 
 pub async fn health() -> impl IntoResponse {
     Json(json!({ "status": "ok" }))
@@ -223,7 +223,8 @@ pub async fn ready(State(st): State<Arc<AppState>>) -> impl IntoResponse {
 }
 
 /// Ingest a battle event: durable Postgres write, optional Elastic index, live
-/// SSE fan-out.
+/// SSE fan-out. When labels contain `chain_id`, also upserts attack_chains /
+/// attack_chain_steps (and remediation_summary for green remediation events).
 pub async fn ingest(
     State(st): State<Arc<AppState>>,
     Json(ev): Json<BattleEvent>,
@@ -260,6 +261,10 @@ pub async fn ingest(
         return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": e.to_string() })));
     }
 
+    if let Err(e) = sync_attack_chain(&st, &ev, id).await {
+        tracing::warn!("attack chain sync failed: {e}");
+    }
+
     st.elastic.index(&ev).await;
 
     // Best-effort live fan-out (ignore if no subscribers).
@@ -268,6 +273,142 @@ pub async fn ingest(
     }
 
     (StatusCode::CREATED, Json(json!({ "accepted": true, "id": id })))
+}
+
+/// Upsert chain metadata + step from event labels.chain_id / chain_step.
+async fn sync_attack_chain(
+    st: &AppState,
+    ev: &BattleEvent,
+    event_id: uuid::Uuid,
+) -> Result<(), sqlx::Error> {
+    let Some(chain_id_str) = ev.labels.get("chain_id").filter(|s| !s.is_empty()) else {
+        return Ok(());
+    };
+    let Ok(chain_id) = uuid::Uuid::parse_str(chain_id_str) else {
+        return Ok(());
+    };
+
+    let strategy = ev
+        .labels
+        .get("strategy")
+        .cloned()
+        .unwrap_or_default();
+    let mutation_source = ev
+        .labels
+        .get("mutation_source")
+        .cloned()
+        .unwrap_or_else(|| "deterministic".into());
+    let strategy_reason = ev
+        .labels
+        .get("strategy_reason")
+        .cloned()
+        .or_else(|| ev.labels.get("strategy").cloned())
+        .unwrap_or_default();
+    let payload_preview = ev
+        .labels
+        .get("payload_preview")
+        .cloned()
+        .unwrap_or_else(|| {
+            if ev.detail.len() > 200 {
+                format!("{}…", &ev.detail[..200])
+            } else {
+                ev.detail.clone()
+            }
+        });
+    let step_index: i32 = ev
+        .labels
+        .get("chain_step")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0);
+
+    // Green remediation: attach summary and mark contained.
+    if ev.kind == "remediation" {
+        let summary = ev
+            .labels
+            .get("summary")
+            .cloned()
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| ev.detail.clone());
+        sqlx::query(
+            "UPDATE attack_chains SET \
+               remediation_summary = CASE WHEN $2 <> '' THEN $2 ELSE remediation_summary END, \
+               status = 'contained', \
+               updated_at = now() \
+             WHERE id = $1",
+        )
+        .bind(chain_id)
+        .bind(&summary)
+        .execute(&st.pool)
+        .await?;
+        return Ok(());
+    }
+
+    if ev.kind != "attack" {
+        return Ok(());
+    }
+
+    let landed = ev.outcome == "allowed";
+    let status = if landed { "landed" } else { "active" };
+
+    sqlx::query(
+        "INSERT INTO attack_chains (id, started_at, updated_at, status, strategy, landed_steps, technique_path) \
+         VALUES ($1, $2, $2, $3, $4, $5, CASE WHEN $6 <> '' THEN ARRAY[$6]::text[] ELSE '{}'::text[] END) \
+         ON CONFLICT (id) DO UPDATE SET \
+           updated_at = EXCLUDED.updated_at, \
+           strategy = CASE WHEN EXCLUDED.strategy <> '' THEN EXCLUDED.strategy ELSE attack_chains.strategy END, \
+           landed_steps = attack_chains.landed_steps + CASE WHEN $7 THEN 1 ELSE 0 END, \
+           technique_path = CASE \
+             WHEN $6 <> '' AND NOT ($6 = ANY(attack_chains.technique_path)) \
+               THEN attack_chains.technique_path || $6 \
+             WHEN $6 <> '' AND cardinality(attack_chains.technique_path) = 0 \
+               THEN ARRAY[$6]::text[] \
+             ELSE attack_chains.technique_path \
+           END, \
+           status = CASE \
+             WHEN attack_chains.status = 'contained' THEN attack_chains.status \
+             WHEN $7 THEN 'landed' \
+             ELSE attack_chains.status \
+           END",
+    )
+    .bind(chain_id)
+    .bind(ev.ts)
+    .bind(status)
+    .bind(&strategy)
+    .bind(if landed { 1i32 } else { 0i32 })
+    .bind(&ev.technique)
+    .bind(landed)
+    .execute(&st.pool)
+    .await?;
+
+    sqlx::query(
+        "INSERT INTO attack_chain_steps \
+         (chain_id, step_index, session_id, event_id, technique, variant, outcome, mutation_source, strategy_reason, payload_preview, ts) \
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) \
+         ON CONFLICT (chain_id, step_index) DO UPDATE SET \
+           outcome = EXCLUDED.outcome, \
+           event_id = EXCLUDED.event_id, \
+           technique = EXCLUDED.technique, \
+           variant = EXCLUDED.variant, \
+           mutation_source = EXCLUDED.mutation_source, \
+           strategy_reason = EXCLUDED.strategy_reason, \
+           payload_preview = EXCLUDED.payload_preview, \
+           ts = EXCLUDED.ts",
+    )
+    .bind(chain_id)
+    .bind(step_index)
+    .bind(&ev.session_id)
+    .bind(event_id)
+    .bind(&ev.technique)
+    .bind(&ev.variant)
+    .bind(&ev.outcome)
+    .bind(&mutation_source)
+    .bind(&strategy_reason)
+    .bind(&payload_preview)
+    .bind(ev.ts)
+    .execute(&st.pool)
+    .await?;
+
+    Ok(())
 }
 
 #[derive(Deserialize)]
@@ -485,4 +626,102 @@ pub async fn stream(
         Err(_) => None,
     });
     Sse::new(stream).keep_alive(axum::response::sse::KeepAlive::default())
+}
+
+#[derive(Deserialize)]
+pub struct ChainsQuery {
+    #[serde(default = "default_chain_status")]
+    pub status: String,
+    #[serde(default = "default_limit")]
+    pub limit: i64,
+}
+fn default_chain_status() -> String {
+    "landed".into()
+}
+
+/// GET /api/chains?status=landed&limit= — successful (or filtered) attack chains.
+pub async fn chains(
+    State(st): State<Arc<AppState>>,
+    Query(q): Query<ChainsQuery>,
+) -> impl IntoResponse {
+    let status = if q.status.is_empty() {
+        "landed".to_string()
+    } else {
+        q.status
+    };
+    let rows = if status == "all" {
+        sqlx::query_as::<_, ChainRow>(
+            "SELECT id, started_at, updated_at, status, strategy, landed_steps, technique_path, remediation_summary \
+             FROM attack_chains ORDER BY updated_at DESC LIMIT $1",
+        )
+        .bind(q.limit.clamp(1, 1000))
+        .fetch_all(&st.pool)
+        .await
+    } else {
+        // "landed" also returns contained (successful then remediated).
+        let statuses: Vec<String> = if status == "landed" {
+            vec!["landed".into(), "contained".into()]
+        } else {
+            vec![status]
+        };
+        sqlx::query_as::<_, ChainRow>(
+            "SELECT id, started_at, updated_at, status, strategy, landed_steps, technique_path, remediation_summary \
+             FROM attack_chains WHERE status = ANY($1) ORDER BY updated_at DESC LIMIT $2",
+        )
+        .bind(&statuses)
+        .bind(q.limit.clamp(1, 1000))
+        .fetch_all(&st.pool)
+        .await
+    };
+
+    match rows {
+        Ok(r) => (StatusCode::OK, Json(json!({ "chains": r }))),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": e.to_string() })),
+        ),
+    }
+}
+
+/// GET /api/chains/:id — chain detail + ordered steps.
+pub async fn chain_detail(
+    State(st): State<Arc<AppState>>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+) -> impl IntoResponse {
+    let Ok(uid) = uuid::Uuid::parse_str(&id) else {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "error": "invalid chain id" })),
+        );
+    };
+    let chain = sqlx::query_as::<_, ChainRow>(
+        "SELECT id, started_at, updated_at, status, strategy, landed_steps, technique_path, remediation_summary \
+         FROM attack_chains WHERE id = $1",
+    )
+    .bind(uid)
+    .fetch_optional(&st.pool)
+    .await;
+
+    match chain {
+        Ok(None) => (StatusCode::NOT_FOUND, Json(json!({ "error": "not found" }))),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": e.to_string() })),
+        ),
+        Ok(Some(c)) => {
+            let steps = sqlx::query_as::<_, ChainStepRow>(
+                "SELECT id, chain_id, step_index, session_id, event_id, technique, variant, outcome, \
+                 mutation_source, strategy_reason, payload_preview, ts \
+                 FROM attack_chain_steps WHERE chain_id = $1 ORDER BY step_index ASC",
+            )
+            .bind(uid)
+            .fetch_all(&st.pool)
+            .await
+            .unwrap_or_default();
+            (
+                StatusCode::OK,
+                Json(json!({ "chain": c, "steps": steps })),
+            )
+        }
+    }
 }
