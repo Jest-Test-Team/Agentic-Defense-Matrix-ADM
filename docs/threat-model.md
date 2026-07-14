@@ -8,9 +8,21 @@ Each threat class below is **operationalized** as a base technique in the red-te
 corpus (`pkg/redteam/corpus.go`, tagged with its ATLAS/OWASP id), which the generator
 expands into **10,000 enumerated, deterministic variants** (`RT-00001…RT-10000`) via
 mutations (base64, hex, zero-width, homoglyph, paraphrase, …) and runs continuously
-against the live gateway. Browse them all on the dashboard's **Matrix** page. The
-[research program](research/) evaluates ADM's detection against these classes at a
-matched false-positive rate — see [ablation-results](research/ablation-results.md).
+against the live gateway. On a **landing**, the continuous `redteam_agent` may also
+call the hosted LLM for **adaptive mutation** within an `attack_chain` (ADR-008).
+Browse base variants on the dashboard's **Matrix** page and successful chains under
+**Successful attack chains**. The [research program](research/) evaluates ADM's
+detection against these classes at a matched false-positive rate — see
+[ablation-results](research/ablation-results.md).
+
+### LLM-assisted team failure modes (ADR-008)
+
+| Failure | Mitigation |
+|---------|------------|
+| Red adaptive mutate errors / bad JSON | Skip follow-up; keep deterministic corpus fire |
+| Green triage errors | Fallback always-revoke + restart by attack target |
+| LLM suggests infra containers | Restart whitelist: `planner\|executor\|summarizer` + `adm.role=agent` only |
+| Free-tier rate limit | Failover Groq → X.AI; LLM only on landings |
 
 ## Threat Matrix
 

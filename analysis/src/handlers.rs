@@ -63,7 +63,7 @@ fn catalog() -> Vec<Svc> {
         Svc { name: "Planner Agent", tech: "Go + gRPC", category: "Agents", detail: "Task decomposition", probe: Http("http://planner:9081/health"), optional: false, hint: None },
         Svc { name: "Executor Agent", tech: "Go + gRPC", category: "Agents", detail: "Tool execution (Docker API)", probe: Http("http://executor:9082/health"), optional: false, hint: None },
         Svc { name: "Summarizer Agent", tech: "Go + gRPC", category: "Agents", detail: "Response summarization", probe: Http("http://summarizer:9083/health"), optional: false, hint: None },
-        Svc { name: "LLM Backend", tech: "Groq → X.AI", category: "Agents", detail: "Chat-completion inference (Groq primary, X.AI fallback)", probe: Llm, optional: false, hint: None },
+        Svc { name: "LLM Backend", tech: "Groq → X.AI", category: "Agents", detail: "Inference for gateway/agents + red adaptive mutate + green triage", probe: Llm, optional: false, hint: None },
         Svc { name: "Sandboxing", tech: "Docker API", category: "Runtime", detail: "Ephemeral per-agent containers (via executor)", probe: Http("http://executor:9082/health"), optional: false, hint: None },
         Svc { name: "Storage", tech: "Redis 7", category: "Runtime", detail: "SIEM hot path + session store", probe: Tcp("redis:6379"), optional: false, hint: None },
         Svc { name: "Durable Log", tech: "Neon Postgres", category: "Data", detail: "Retained battle-event log", probe: Db, optional: false, hint: None },

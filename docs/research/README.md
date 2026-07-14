@@ -110,6 +110,7 @@ program so the paper structure can be explored, not memorized.
 
 - [ ] Deterministic red-team corpus (`GenerateCorpus(10000, seed=1337)`) — **done**, seed-pinned
 - [ ] MITRE ATLAS / OWASP-LLM tags on every technique — **done** (`pkg/redteam/corpus.go`)
+- [ ] Adaptive red / green LLM + attack-chain persistence — **done** (`pkg/llmops`, ADR-008, `/api/chains`)
 - [ ] Baseline harness: Llama Guard, RegEx allow-list, no-defense control — *to build*
 - [ ] Latency/throughput/overhead measurement rig with confidence intervals — *to build*
 - [ ] Public dataset of labeled trajectories (benign vs drift) — *to curate*

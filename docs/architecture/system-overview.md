@@ -172,6 +172,9 @@ flowchart TD
     O --> P[Response to User]
 ```
 
+Battle-path detail (red adaptive LLM, green triage, attack chains) lives in
+[data-flow.md](data-flow.md) and [ADR-008](../adr/008-llm-red-green-teams.md).
+
 ## Service Communication Matrix
 
 | Source | Target | Protocol | Port | Purpose |

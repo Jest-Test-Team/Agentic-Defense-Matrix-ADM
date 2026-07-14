@@ -109,3 +109,16 @@ graph LR
         S4[All → OTel: OTLP]
     end
 ```
+
+## Hosted LLM (red / green / blue)
+
+See [ADR-006](../adr/006-hosted-llm-failover.md) and
+[ADR-008](../adr/008-llm-red-green-teams.md).
+
+- **Blue** agents and gateway: chat completions to Groq (X.AI fallback).
+- **Red** adaptive mutate: only after a landing; payloads stay aimed at
+  `ADM_GATEWAY_URL` only.
+- **Green** triage: restart targets constrained to labelled agent containers;
+  never infra (db, redis, gateway, analysis).
+- Quota: corpus fire does not call the LLM; landings do. Failures fall back to
+  deterministic / always-revoke paths so a dead LLM never stalls containment.

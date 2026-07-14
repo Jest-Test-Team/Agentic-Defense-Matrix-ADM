@@ -183,8 +183,8 @@ agentic-defense-matrix/
 │   ├── gateway/                   # API Gateway + semantic middleware
 │   ├── siem_engine/               # SIEM correlation engine
 │   ├── control_plane/             # Auto-update server
-│   ├── redteam_agent/             # Red team: fires the 10,000-variant corpus
-│   ├── greenteam_agent/           # Green team: session revoke + container containment
+│   ├── redteam_agent/             # Red team: 10k corpus + LLM adaptive mutation / chains
+│   ├── greenteam_agent/           # Green team: LLM triage + revoke + contain
 │   ├── agent/{planner,executor,summarizer}/   # gRPC agent services
 │   ├── corpus_dump/               # Renders the corpus → dashboard/public/corpus.json
 │   ├── ablation/                  # C1: embedding-φ vs keyword ablation
@@ -194,10 +194,11 @@ agentic-defense-matrix/
 │   └── baseline/                  # SOTA: ADM drift vs Llama Guard + asymmetry α
 ├── pkg/
 │   ├── auth/                      # OPA + SPIRE client, JWT management
-│   ├── semantic/                  # Intent-drift detection: analyzer + pluggable φ (featurizer, drift)
+│   ├── semantic/                  # Intent-drift detection: analyzer + pluggable φ
 │   ├── telemetry/                 # OTel helpers + LatencyRecorder (percentile δ/κ)
 │   ├── ollama/                    # OpenAI-compatible LLM client (Groq → X.AI failover)
-│   ├── redteam/                   # Deterministic 10,000-variant attack corpus (MITRE-ATLAS tagged)
+│   ├── llmops/                    # Red AdaptiveMutate + green TriageRemediation
+│   ├── redteam/                   # Deterministic 10,000-variant attack corpus
 │   ├── battle/                    # Battle event schema + emitter
 │   ├── policy/                    # OPA Rego evaluation client
 │   ├── ringbuffer/                # Lock-free ring buffer (SIEM hot path)
@@ -230,15 +231,21 @@ agentic-defense-matrix/
 │   │   ├── system-overview.md     # Mermaid architecture diagrams
 │   │   ├── c4-container.puml      # PlantUML C4 model
 │   │   ├── deployment.md          # Deployment architecture
-│   │   ├── data-flow.md           # Data flow diagrams
+│   │   ├── data-flow.md           # Data flow + battle / LLM roles
+│   │   ├── live-deployment.md     # OCI + Neon + Groq topology
 │   │   └── security.md            # Security architecture
+│   ├── battle-orchestration.md    # Red / blue / green exercise
 │   ├── threat-model.md            # MITRE ATLAS threat mapping
+│   ├── research/                  # Formalization + experiment results
 │   └── adr/                       # Architecture Decision Records
 │       ├── 001-opa-spire-auth.md
 │       ├── 002-redis-streams-siem.md
 │       ├── 003-separate-agent-services.md
 │       ├── 004-rust-watchdog.md
-│       └── 005-ollama-llm.md
+│       ├── 005-ollama-llm.md
+│       ├── 006-hosted-llm-failover.md
+│       ├── 007-intent-drift-research.md
+│       └── 008-llm-red-green-teams.md
 ├── analysis/                      # Rust battle-analysis engine (axum + Postgres + Elastic) + dashboard API
 ├── dashboard/                     # Realtime Next.js dashboard (static, GitHub Pages, EN/繁中)
 ├── worker/                        # (deprecated) Cloudflare Worker HTTPS proxy — superseded by Caddy
@@ -262,7 +269,7 @@ agentic-defense-matrix/
 
 1. **L7 Semantic Defense (Gateway):** Go middleware intercepts all agent requests, computes short-window semantic similarity to block automated probing.
 2. **OS Behavior Containment (Endpoint):** Rust watchdog daemon with WFP/ES filters binds agent socket connections to session IDs.
-3. **Green Team Auto-Response:** SIEM triggers webhook → Gateway revokes session IAM → Watchdog SIGKILLs container + blocks egress.
+3. **Green Team Auto-Response:** On a landing, optional LLM triage → Gateway revokes session IAM → Docker restart of selected `adm.role=agent` containers; SOC summary written to the battle log / attack chain.
 
 ---
 

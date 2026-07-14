@@ -299,6 +299,25 @@ else means running it from a host that can reach the target gateway:
 > **Authorization:** only run the red team agent against ADM deployments you
 > own or are explicitly authorized to test. It sends real attack payloads.
 
+### Continuous battle red/green agents (deployed stack)
+
+On a full battle deploy (`make battle-up` / `battle-up.sh`), `adm-redteam` and
+`adm-greenteam` run as long-lived containers (not the Go test harness above):
+
+| Env | Meaning |
+|-----|---------|
+| `ADM_RED_LLM` | `true` → on landing, call Groq for adaptive next step (default in battle compose) |
+| `ADM_GREEN_LLM` | `true` → LLM triage + SOC summary before revoke/restart |
+| `ADM_CHAIN_MAX_STEPS` | Max adaptive follow-ups per chain (default 5) |
+| `ADM_LLM_*` | Same Groq → X.AI keys as the gateway (see ADR-006 / ADR-008) |
+
+Smoke-check chains after landings:
+
+```bash
+curl -s "http://$IP:8090/api/chains?status=landed&limit=5" | jq .
+curl -s "http://$IP:8090/api/chains/<chain-uuid>" | jq .
+```
+
 ## 10. Research experiments (offline, from the repo root)
 
 The [research program](research/) ships runnable experiments that produce the

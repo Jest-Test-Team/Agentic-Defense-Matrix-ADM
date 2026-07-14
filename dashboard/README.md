@@ -2,7 +2,8 @@
 
 A realtime web dashboard for the Agentic Defense Matrix red/blue/green exercise.
 It shows, live, how the defenses are holding: service health, a battle scoreboard
-(attacks, block rate, detection rate, remediations, MTTR), a per-technique
+(attacks, block rate, detection rate, remediations, MTTR), **successful attack
+chains** (adaptive LLM follow-ups + green SOC summaries), a per-technique
 blocked-vs-landed breakdown, a streaming event feed, and recent attack→remediation
 sessions.
 
@@ -13,9 +14,10 @@ sessions.
 The dashboard is a **static site** (Next.js `output: "export"`) — no server. In the
 browser it:
 
-- polls the analysis API `GET /api/stats` and `/api/timeline` every few seconds,
+- polls the analysis API `GET /api/stats`, `/api/timeline`, and `/api/chains` every few seconds,
 - opens a Server-Sent-Events stream `GET /api/stream` for live events,
-- probes `/health`, `/ready` (Neon), and the gateway `/v1/health`.
+- probes `/health`, `/ready` (Neon), and the gateway `/v1/health`,
+- opens chain detail via `GET /api/chains/:id` (steps, strategy, remediation summary).
 
 Because GitHub Pages is HTTPS, the API must also be HTTPS (see the Caddy setup in
 `docs/architecture/live-deployment.md`). The endpoint is **runtime-configurable**
@@ -38,24 +40,9 @@ explains the project's purpose and the three teams in both languages.
 ## Layout
 
 | File | Purpose |
-|---|---|
-| `app/page.tsx` | The dashboard (single client component + small presentational pieces) |
-| `app/globals.css` | Dark-theme styling (colors from the repo's dataviz palette) |
-| `lib/api.ts` | Endpoint config + typed fetch helpers |
-| `lib/i18n.ts` | EN / zh-Hant dictionary |
-| `next.config.mjs` | Static export + `basePath` for GitHub Pages |
-
-## Develop
-
-```bash
-cd dashboard
-npm install
-npm run dev            # http://localhost:3000
-# point it at a running API, e.g. http://localhost:3000/?api=http://localhost:8090&gw=http://localhost:8080
-```
-
-## Build & deploy
-
-`npm run build` produces the static `out/`. Deployment is automatic:
-`.github/workflows/pages.yml` builds and publishes to GitHub Pages on every push
-to `dashboard/**` (baking in the correct Pages base path).
+|------|---------|
+| `app/page.tsx` | Main battle console (scoreboard, feed, chains, matrix preview) |
+| `app/matrix/page.tsx` | Full 10k-variant corpus browser |
+| `app/search/page.tsx` | Elasticsearch full-text search |
+| `lib/api.ts` | Typed client for analysis/gateway endpoints |
+| `lib/i18n.ts` | EN / 繁中 strings |

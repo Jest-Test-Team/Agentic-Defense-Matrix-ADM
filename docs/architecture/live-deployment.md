@@ -84,8 +84,8 @@ Everything runs on **free tiers**.
 | **summarizer** | `adm-summarizer` | 9083 gRPC | agent | Response-summarization agent (uses the LLM) |
 | **redis** | `redis:7-alpine` | 6379 | infra | Session + event store; realtime `adm:battle` stream |
 | **analysis** | `adm-analysis` (Rust/axum) | 8090 | 📊 | Ingests battle events → Neon (durable) + Elastic; serves `/api/stats /timeline /events /stream` + the bundled HTML dashboard |
-| **redteam** | `adm-redteam` | — | 🔴 red | Continuous attacker: expands ~30 techniques → 10k variants, fires them at the gateway, logs outcomes |
-| **greenteam** | `adm-greenteam` | — | 🟢 green | Watches for landed attacks → revokes session (gateway admin) + restarts the affected agent (Docker), logs remediation |
+| **redteam** | `adm-redteam` | — | 🔴 red | Continuous attacker: 30 techniques → 10k variants; on landing, optional Groq adaptive mutation + attack chain |
+| **greenteam** | `adm-greenteam` | — | 🟢 green | Watches landings → optional LLM triage → revoke + restart agents, logs SOC summary |
 | otel-collector | `adm-*`/upstream | 4317/4318 | obs | Telemetry (disabled on the micro; `ADM_BATTLE_FULL=true` to enable) |
 | control-plane | `adm-control-plane` | 9092 | infra | Auto-update checks (disabled on the micro) |
 | watchdog | `adm-watchdog` (Rust) | host | 🔵 blue | OS-level endpoint monitor (disabled on the micro) |
@@ -98,22 +98,25 @@ otel/control-plane/watchdog to fit memory.
 
 ## 4. Request / data flow
 
-1. **Viewer** opens the GitHub Pages dashboard (HTTPS). It polls `/api/stats` &
-   `/api/timeline` every few seconds and opens an SSE stream `/api/stream`, all
-   against `https://api.dennisleehappy.org`.
+1. **Viewer** opens the GitHub Pages dashboard (HTTPS). It polls `/api/stats`,
+   `/api/timeline`, and `/api/chains` every few seconds and opens an SSE stream
+   `/api/stream`, all against `https://api.dennisleehappy.org`.
 2. **Cloudflare DNS** resolves that to the box; **Caddy** terminates TLS and routes
    the request (`/v1/*` → gateway, else → analysis).
 3. **Red team** continuously POSTs attacks to the **gateway** (`/v1/chat/completions`,
    `/v1/tools/execute`). The gateway runs semantic analysis + **OPA policy** and
-   either blocks or forwards; chat completions go to **Groq**.
+   either blocks or forwards; chat completions go to **Groq**. On a landing with
+   `ADM_RED_LLM=true`, red asks Groq for an adaptive next step and upserts an
+   **attack chain** (`labels.chain_id`).
 4. Each attack/defense/remediation is emitted as a **battle event** to the
-   **analysis** engine, which writes it to **Neon Postgres** (durable) and indexes
-   it in **Bonsai Elasticsearch**, and re-publishes it on the SSE stream.
+   **analysis** engine, which writes it to **Neon Postgres** (durable; including
+   `attack_chains` / `attack_chain_steps`) and indexes it in **Bonsai Elasticsearch**,
+   and re-publishes it on the SSE stream.
 5. **Green team** watches the `adm:battle` Redis stream; when an attack lands it
-   calls the gateway's admin revoke and restarts the affected agent container, then
-   logs the remediation.
-6. The dashboard renders the scoreboard, per-technique breakdown, live feed, and
-   correlated sessions from the analysis engine's responses.
+   optionally runs LLM triage (`ADM_GREEN_LLM`), then revokes / restarts selected
+   `adm.role=agent` containers, and logs a remediation with a SOC `summary`.
+6. The dashboard renders the scoreboard, attack chains, per-technique breakdown,
+   live feed, and correlated sessions from the analysis engine's responses.
 
 ---
 
